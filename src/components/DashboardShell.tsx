@@ -35,15 +35,54 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
     <div className={`min-h-screen transition-colors duration-300 font-sans overflow-hidden flex flex-col items-center p-2 sm:p-6 ${isDarkMode ? 'bg-[#050505] text-[#e4e4e7]' : 'bg-slate-100 text-slate-900'}`}>
       
       <header className="flex w-full items-center justify-between px-4 pb-6 max-w-[1440px] pt-4 sm:pt-0">
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-1.5">
           <GlobeLogo />
-          <div className="flex flex-col justify-center">
-            <span className="text-slate-900 dark:text-white font-black leading-none tracking-wider text-[16px] italic pr-2 flex items-center gap-2">
+          <div className="flex flex-col justify-center relative">
+            <span className="font-black leading-none tracking-wider text-[16px] italic pr-2 flex items-center gap-2 bg-gradient-to-r from-cyan-300 via-teal-400 to-cyan-500 bg-clip-text text-transparent">
               ATLASOPS
             </span>
-            <span className="text-indigo-600 dark:text-[#3b82f6] font-mono text-[8px] tracking-[0.25em] uppercase font-bold mt-0.5">
+            <span className="text-cyan-600 dark:text-cyan-400/70 font-mono text-[8px] tracking-[0.25em] uppercase font-bold mt-0.5">
               Intelligent Systems
             </span>
+            {/* Rocket trail underline */}
+            <svg
+              className="absolute -bottom-1.5 left-0 w-full h-[6px] overflow-visible"
+              viewBox="0 0 120 6"
+              fill="none"
+              preserveAspectRatio="none"
+            >
+              <defs>
+                <linearGradient id="rocketTrail" x1="0%" y1="50%" x2="100%" y2="50%">
+                  <stop offset="0%" stopColor="transparent" />
+                  <stop offset="20%" stopColor="#06b6d4" stopOpacity="0.15" />
+                  <stop offset="60%" stopColor="#06b6d4" stopOpacity="0.6" />
+                  <stop offset="85%" stopColor="#22d3ee" stopOpacity="0.9" />
+                  <stop offset="100%" stopColor="#67e8f9" stopOpacity="1" />
+                </linearGradient>
+                <filter id="trailGlow">
+                  <feGaussianBlur stdDeviation="1" result="blur" />
+                  <feMerge>
+                    <feMergeNode in="blur" />
+                    <feMergeNode in="SourceGraphic" />
+                  </feMerge>
+                </filter>
+              </defs>
+              <path
+                d="M0,3 Q30,5 60,3 T120,2.5"
+                stroke="url(#rocketTrail)"
+                strokeWidth="1.5"
+                strokeLinecap="round"
+                filter="url(#trailGlow)"
+              />
+              {/* Bright tip particle */}
+              <circle cx="118" cy="2.5" r="1.5" fill="#67e8f9" opacity="0.9">
+                <animate attributeName="opacity" values="0.9;0.4;0.9" dur="2s" repeatCount="indefinite" />
+              </circle>
+              <circle cx="118" cy="2.5" r="3" fill="#22d3ee" opacity="0.2">
+                <animate attributeName="r" values="2;4;2" dur="2s" repeatCount="indefinite" />
+                <animate attributeName="opacity" values="0.3;0.1;0.3" dur="2s" repeatCount="indefinite" />
+              </circle>
+            </svg>
           </div>
         </div>
         
