@@ -108,11 +108,51 @@ def _publish_to_contentful(state: ContentOpsState) -> dict:
     return {}
 
 
+def _create_buffer_idea(access_token: str, title: str, text: str) -> dict:
+    """Create a Buffer Idea via GraphQL API."""
+    url = "https://api.bufferapp.com/graphql"
+    headers = {
+        "Authorization": f"Bearer {access_token}",
+        "Content-Type": "application/json",
+    }
+    
+    mutation = """
+    mutation CreateIdea($input: CreateIdeaInput!) {
+      createIdea(input: $input) {
+        ... on Idea {
+          id
+          content {
+            title
+            text
+          }
+        }
+      }
+    }
+    """
+    
+    variables = {
+        "input": {
+            "organizationId": "69c53b6811e07e49d3fcee55",
+            "content": {
+                "title": title,
+                "text": text
+            }
+        }
+    }
+    
+    try:
+        resp = requests.post(url, headers=headers, json={"query": mutation, "variables": variables}, timeout=15)
+        return resp.json()
+    except Exception as e:
+        return {"error": str(e)}
+
+
 def publishing_node(state: ContentOpsState) -> ContentOpsState:
     """Node 5: Publishing
     
     - Buffer API: Post LinkedIn/Twitter content via connected profiles.
-    - Contentful CMS: Push long-form blog post (free tier).
+    - Buffer GraphQL: Create an Idea for cross-platform review.
+    - Contentful CMS: Push long-form blog post.
     """
     supabase = get_supabase_client()
     buffer_token = os.environ.get("BUFFER_ACCESS_TOKEN", "")
@@ -130,11 +170,26 @@ def publishing_node(state: ContentOpsState) -> ContentOpsState:
 
     # ── Buffer: Social Media Publishing ──
     if buffer_token:
+        # Create a Buffer Idea first (Synchronous for insurance)
+        idea_res = _create_buffer_idea(buffer_token, state.get("topic", "New Idea"), state.get("draft_text", ""))
+        if idea_res.get("data", {}).get("createIdea"):
+            published_urls["buffer_idea"] = "Created in Buffer Ideas"
+            supabase.table("agent_logs").insert({
+                "job_id": state["job_id"],
+                "organization_id": state["org_id"],
+                "agent_name": "Deployment Auth",
+                "message": "Mission exported to Buffer Ideas queue via GraphQL.",
+                "severity": "info",
+            }).execute()
+
         profiles = _get_buffer_profiles(buffer_token)
+        # ... (rest of social logic remains same)
 
         # Separate profiles by service
         twitter_profiles = [p["id"] for p in profiles if p.get("service") in ("twitter", "x")]
         linkedin_profiles = [p["id"] for p in profiles if p.get("service") == "linkedin"]
+        instagram_profiles = [p["id"] for p in profiles if p.get("service") == "instagram"]
+        threads_profiles = [p["id"] for p in profiles if p.get("service") == "threads"]
 
         # Post LinkedIn variant
         if linkedin_profiles and variants.get("linkedin"):
@@ -161,6 +216,50 @@ def publishing_node(state: ContentOpsState) -> ContentOpsState:
                         "organization_id": state["org_id"],
                         "agent_name": "Deployment Auth",
                         "message": f"Twitter/X post dispatched via Buffer (profile {r['profile_id']}).",
+                        "severity": "info",
+                    }).execute()
+
+        # Post Instagram variant (requires image)
+        if instagram_profiles and variants.get("instagram"):
+            # Buffer requires a media object for Instagram
+            image_url = "https://images.unsplash.com/photo-1614850523296-d8c1af93d400?q=80&w=1000&auto=format&fit=crop" # Brand Placeholder
+            results = []
+            for pid in instagram_profiles:
+                try:
+                    data = {
+                        "text": variants["instagram"],
+                        "now": "true",
+                        "access_token": buffer_token,
+                        "profile_ids[]": pid,
+                        "media[photo]": image_url
+                    }
+                    resp = requests.post(f"{BUFFER_API_BASE}/updates/create.json", data=data, timeout=15)
+                    results.append({"profile_id": pid, "response": resp.json()})
+                except Exception as e:
+                    results.append({"profile_id": pid, "error": str(e)})
+
+            for r in results:
+                if r.get("response", {}).get("success"):
+                    published_urls["instagram"] = "Published via Buffer"
+                    supabase.table("agent_logs").insert({
+                        "job_id": state["job_id"],
+                        "organization_id": state["org_id"],
+                        "agent_name": "Deployment Auth",
+                        "message": f"Instagram post dispatched via Buffer (profile {r['profile_id']}).",
+                        "severity": "info",
+                    }).execute()
+
+        # Post Threads variant
+        if threads_profiles and variants.get("threads"):
+            results = _publish_to_buffer_multi(buffer_token, threads_profiles, variants["threads"])
+            for r in results:
+                if r.get("response", {}).get("success"):
+                    published_urls["threads"] = "Published via Buffer"
+                    supabase.table("agent_logs").insert({
+                        "job_id": state["job_id"],
+                        "organization_id": state["org_id"],
+                        "agent_name": "Deployment Auth",
+                        "message": f"Threads post dispatched via Buffer (profile {r['profile_id']}).",
                         "severity": "info",
                     }).execute()
 

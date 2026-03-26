@@ -13,7 +13,7 @@ export function JobDetailPanel({ job, onClose }: { job: Job | null; onClose: () 
     if (!job || isApproving) return;
     setIsApproving(true);
     try {
-      const resp = await fetch(`http://localhost:8000/api/jobs/${job.id}/approve`, {
+      const resp = await fetch(`http://127.0.0.1:8000/api/jobs/${job.id}/approve`, {
         method: 'POST'
       });
       if (!resp.ok) throw new Error('API Rejection');

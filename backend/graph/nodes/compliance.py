@@ -1,5 +1,5 @@
 import json
-from langchain_anthropic import ChatAnthropic
+from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.prompts import ChatPromptTemplate
 from backend.supabase_client import get_supabase_client
 from backend.graph.state import ContentOpsState
@@ -29,7 +29,7 @@ def compliance_node(state: ContentOpsState) -> ContentOpsState:
         if blocked.data:
             rules_text += f"\n\nBlocked terms: {[b['term'] for b in blocked.data]}"
 
-    llm = ChatAnthropic(model="claude-3-5-sonnet-20240620", temperature=0)
+    llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash", temperature=0)
     
     prompt = ChatPromptTemplate.from_messages([
         ("system", "You are a strict compliance reviewer. Return strictly formatted JSON without any markdown code block wrapper."),
@@ -55,7 +55,8 @@ def compliance_node(state: ContentOpsState) -> ContentOpsState:
             
         result = json.loads(content.strip())
     except Exception as e:
-        result = {"status": "fail", "feedback": "Failed to parse compliance response."}
+        print(f"Compliance failed: {e}")
+        raise e
 
     state["compliance_result"] = result
     

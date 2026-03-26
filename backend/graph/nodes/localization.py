@@ -1,6 +1,7 @@
 import os
+import json
 import requests
-from langchain_anthropic import ChatAnthropic
+from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.prompts import ChatPromptTemplate
 from backend.supabase_client import get_supabase_client
 from backend.graph.state import ContentOpsState
@@ -32,12 +33,12 @@ def localization_node(state: ContentOpsState) -> ContentOpsState:
     translated = {}
     draft = state.get("draft_text", "")
     
-    for lang in languages:
-        if lang == "EN":
-            continue
-        
+    from concurrent.futures import ThreadPoolExecutor
+    
+    def translate_lang(lang):
         lang_name = LANG_NAMES.get(lang, lang)
         used_method = "claude"
+        trans_text = ""
             
         # ── Indic languages: try IndicTrans2 (HuggingFace) first ──
         if lang in ["HI", "MR", "TA"]:
@@ -49,15 +50,15 @@ def localization_node(state: ContentOpsState) -> ContentOpsState:
                     response = requests.post(API_URL, headers=headers, json={"inputs": draft[:1000]}, timeout=30)
                     res_val = response.json()
                     if isinstance(res_val, list) and len(res_val) > 0 and "translation_text" in res_val[0]:
-                        translated[lang] = res_val[0]["translation_text"]
+                        trans_text = res_val[0]["translation_text"]
                         used_method = "indictrans2"
                 except Exception:
                     pass  # Falls through to Claude below
 
-        # ── All languages: Claude fallback (replaces DeepL for FR/DE) ──
-        if lang not in translated:
+        # ── All languages: Claude fallback ──
+        if not trans_text:
             try:
-                llm = ChatAnthropic(model="claude-3-5-sonnet-20240620", temperature=0.3)
+                llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash", temperature=0.3)
                 prompt = ChatPromptTemplate.from_messages([
                     ("system",
                      f"You are a professional native {lang_name} translator and cultural adapter. "
@@ -66,12 +67,12 @@ def localization_node(state: ContentOpsState) -> ContentOpsState:
                     ("user", draft)
                 ])
                 result = (prompt | llm).invoke({})
-                translated[lang] = str(result.content)
+                trans_text = str(result.content)
                 used_method = "claude"
             except Exception as e:
-                translated[lang] = f"[Translation error for {lang_name}: {str(e)}]"
+                trans_text = f"[Translation error for {lang_name}: {str(e)}]"
                 used_method = "error"
-
+        
         # Log which method was used
         supabase.table("agent_logs").insert({
             "job_id": state["job_id"],
@@ -85,9 +86,17 @@ def localization_node(state: ContentOpsState) -> ContentOpsState:
         supabase.table("localizations").upsert({
             "job_id": state["job_id"],
             "language_code": lang,
-            "translated_body": translated.get(lang, ""),
+            "translated_body": trans_text,
             "status": "completed"
         }, on_conflict="job_id,language_code").execute()
+        
+        return lang, trans_text
+
+    # Run in parallel
+    with ThreadPoolExecutor(max_workers=5) as executor:
+        results = list(executor.map(translate_lang, [l for l in languages if l != "EN"]))
+        for lang, text in results:
+            translated[lang] = text
 
     state["localized_variants"] = translated
     

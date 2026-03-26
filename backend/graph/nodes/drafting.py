@@ -1,5 +1,5 @@
 import json
-from langchain_anthropic import ChatAnthropic
+from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.prompts import ChatPromptTemplate
 from backend.supabase_client import get_supabase_client
 from backend.graph.state import ContentOpsState
@@ -15,7 +15,7 @@ def drafting_node(state: ContentOpsState) -> ContentOpsState:
         "severity": "info"
     }).execute()
 
-    llm = ChatAnthropic(model="claude-3-5-sonnet-20240620", temperature=0.7)
+    llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash", temperature=0.7)
     
     prompt = ChatPromptTemplate.from_messages([
         ("system", "You are an expert B2B content creator. Generate a comprehensive drafting response in strictly valid JSON format without markdown code blocks."),
@@ -23,6 +23,8 @@ def drafting_node(state: ContentOpsState) -> ContentOpsState:
          "Return a JSON object with these exact keys:\n"
          "- 'draft_text': (string) The main long-form B2B blog post.\n"
          "- 'linkedin_post': (string) A LinkedIn format post.\n"
+         "- 'instagram_post': (string) An Instagram caption with hashtags.\n"
+         "- 'threads_post': (string) A Threads format post.\n"
          "- 'tweet': (string) A short tweet.\n"
          "- 'email_subject': (string) An email subject line.")
     ])
@@ -51,12 +53,14 @@ def drafting_node(state: ContentOpsState) -> ContentOpsState:
         state["draft_text"] = data.get("draft_text", "")
         state["channel_variants"] = {
             "linkedin": data.get("linkedin_post", ""),
+            "instagram": data.get("instagram_post", ""),
+            "threads": data.get("threads_post", ""),
             "twitter": data.get("tweet", ""),
             "email_subject": data.get("email_subject", "")
         }
     except Exception as e:
-        state["draft_text"] = "Error generating draft: " + str(e)
-        state["channel_variants"] = {}
+        print(f"AI Drafting failed: {e}")
+        raise e  # Fail the pipeline as requested, no mock fallback.
         
     # Update Supabase
     supabase.table("jobs").update({

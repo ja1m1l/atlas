@@ -1,8 +1,8 @@
 "use client";
 
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { useJobContext } from '../store/JobContext';
-import { X, UploadCloud, FileText, Target, Globe2 } from 'lucide-react';
+import { X, UploadCloud, FileText, Target, Globe2, File as FileIcon } from 'lucide-react';
 
 const LANGUAGES = ['EN', 'ES', 'FR', 'DE', 'JA'];
 
@@ -12,6 +12,8 @@ export function NewJobModal({ onClose }: { onClose: () => void }) {
   const [audience, setAudience] = useState('');
   const [selectedLangs, setSelectedLangs] = useState<string[]>(['EN']);
   const [isHoveringFile, setIsHoveringFile] = useState(false);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -21,7 +23,7 @@ export function NewJobModal({ onClose }: { onClose: () => void }) {
       // For this hackathon demo, we use the default organization ID
       const organization_id = "02c4a65c-bad2-41b4-8e69-9aed1b2cca4a";
       
-      const response = await fetch('http://localhost:8000/api/pipeline/start', {
+      const response = await fetch('http://127.0.0.1:8000/api/pipeline/start', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -48,6 +50,36 @@ export function NewJobModal({ onClose }: { onClose: () => void }) {
     setSelectedLangs(prev => 
       prev.includes(lang) ? prev.filter(l => l !== lang) : [...prev, lang]
     );
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsHoveringFile(true);
+  };
+  
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsHoveringFile(false);
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsHoveringFile(false);
+    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+      setSelectedFile(e.dataTransfer.files[0]);
+    }
+  };
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files.length > 0) {
+      setSelectedFile(e.target.files[0]);
+    }
+  };
+
+  const removeFile = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setSelectedFile(null);
+    if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
   return (
@@ -123,17 +155,43 @@ export function NewJobModal({ onClose }: { onClose: () => void }) {
               <UploadCloud className="w-3.5 h-3.5" /> Context Source (Optional)
             </label>
             <div 
-              onDragEnter={() => setIsHoveringFile(true)}
-              onDragLeave={() => setIsHoveringFile(false)}
-              className={`w-full h-32 border-2 border-dashed rounded-xl flex flex-col items-center justify-center transition-colors cursor-pointer group
+              onClick={() => fileInputRef.current?.click()}
+              onDragOver={handleDragOver}
+              onDragLeave={handleDragLeave}
+              onDrop={handleDrop}
+              className={`w-full h-32 border-2 border-dashed rounded-xl flex flex-col items-center justify-center transition-colors cursor-pointer group relative overflow-hidden
                 ${isHoveringFile ? 'bg-indigo-50 border-indigo-400 dark:bg-[#18181b] dark:border-zinc-500' : 'bg-slate-50 border-slate-300 hover:border-indigo-400 dark:bg-[#141417] dark:border-[#27272a]/80 dark:hover:border-zinc-600 dark:hover:bg-[#18181b]/50'}
               `}
             >
-              <div className="p-3 bg-slate-200 dark:bg-white/5 rounded-full mb-3 group-hover:bg-indigo-100 dark:group-hover:bg-white/10 transition-colors">
-                 <UploadCloud className={`w-6 h-6 ${isHoveringFile ? 'text-indigo-600 dark:text-zinc-300' : 'text-slate-400 dark:text-zinc-500'}`} />
-              </div>
-              <p className="text-[13px] text-slate-600 dark:text-zinc-400 font-medium">Drop PDF/DOCX or click to browse</p>
-              <p className="text-[11px] text-slate-400 dark:text-zinc-600 mt-1 font-mono uppercase tracking-widest">Max 10MB</p>
+              <input 
+                type="file" 
+                ref={fileInputRef} 
+                onChange={handleFileChange} 
+                className="hidden" 
+                accept=".pdf,.docx,.txt,image/*" 
+              />
+              {selectedFile ? (
+                <div className="flex flex-col items-center gap-2 relative z-10 w-full px-4">
+                  <div className="flex items-center gap-3 bg-white dark:bg-[#18181b] p-3 rounded-xl border border-slate-200 dark:border-[#27272a]/80 w-full shadow-sm hover:border-rose-200 dark:hover:border-rose-500/50 transition-colors group/file">
+                    <FileIcon className="w-8 h-8 text-indigo-500 shrink-0" />
+                    <div className="flex flex-col overflow-hidden w-full text-left">
+                      <span className="text-[13px] font-semibold text-slate-800 dark:text-zinc-200 truncate">{selectedFile.name}</span>
+                      <span className="text-[11px] text-slate-500 dark:text-zinc-500 font-mono">{(selectedFile.size / 1024 / 1024).toFixed(2)} MB</span>
+                    </div>
+                    <button type="button" onClick={removeFile} className="p-1.5 hover:bg-rose-50 dark:hover:bg-rose-500/10 rounded-lg text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 transition-colors shrink-0 opacity-0 group-hover/file:opacity-100">
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <>
+                  <div className="p-3 bg-slate-200 dark:bg-white/5 rounded-full mb-3 group-hover:bg-indigo-100 dark:group-hover:bg-white/10 transition-colors">
+                     <UploadCloud className={`w-6 h-6 ${isHoveringFile ? 'text-indigo-600 dark:text-zinc-300' : 'text-slate-400 dark:text-zinc-500'}`} />
+                  </div>
+                  <p className="text-[13px] text-slate-600 dark:text-zinc-400 font-medium">Drop PDF/Image or click to browse</p>
+                  <p className="text-[11px] text-slate-400 dark:text-zinc-600 mt-1 font-mono uppercase tracking-widest">Max 10MB</p>
+                </>
+              )}
             </div>
           </div>
 

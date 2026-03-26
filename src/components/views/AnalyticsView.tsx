@@ -4,17 +4,53 @@ import React from 'react';
 import { 
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer 
 } from 'recharts';
-import { Sparkles, Clock, ShieldAlert, DollarSign, ActivitySquare, TrendingDown, ArrowUpRight, ArrowDownRight, RefreshCcw, StopCircle } from 'lucide-react';
+import { Sparkles, Clock, ShieldAlert, IndianRupee, ActivitySquare, TrendingDown, ArrowUpRight, ArrowDownRight, RefreshCcw, StopCircle } from 'lucide-react';
 
-const durationData = [
-  { stage: 'Drafts', val: 1200 },
-  { stage: 'Compliance', val: 800 },
-  { stage: 'L10N', val: 4500 },
-  { stage: 'Approval', val: 9000 },
-  { stage: 'Publish', val: 300 },
-];
+import { useJobContext } from '../../store/JobContext';
 
 export function AnalyticsView() {
+  const { state } = useJobContext();
+  const jobs = state.jobs;
+  
+  const totalJobs = jobs.length;
+
+  let avgTurnaround = "0h 0m";
+  let avgTurnaroundMs = 0;
+  if (totalJobs > 0) {
+    const totalMs = jobs.reduce((acc, job) => {
+      const createdTime = job.createdAt ? new Date(job.createdAt).getTime() : Date.now();
+      const diff = Date.now() - createdTime;
+      return acc + (isNaN(diff) ? 0 : diff);
+    }, 0);
+    avgTurnaroundMs = totalMs / totalJobs;
+    const hours = Math.floor(avgTurnaroundMs / (1000 * 60 * 60));
+    const mins = Math.floor((avgTurnaroundMs % (1000 * 60 * 60)) / (1000 * 60));
+    avgTurnaround = `${hours}h ${mins}m`;
+  }
+
+  let complianceRatingVal = 100;
+  if (totalJobs > 0) {
+    const jobsWithoutIssues = jobs.filter(j => j.complianceIssues === 0).length;
+    complianceRatingVal = (jobsWithoutIssues / totalJobs) * 100;
+  }
+  const complianceRating = `${complianceRatingVal.toFixed(1)}%`;
+
+  const totalValue = jobs.reduce((acc, job) => {
+    const langCount = job.languages?.length || 1;
+    const progressVal = job.progress || 0.1;
+    const multiplier = progressVal > 0 ? progressVal / 100 : 0.1;
+    return acc + (langCount * 12500 * multiplier);
+  }, 0);
+  const costReduction = `₹ ${totalValue.toLocaleString('en-IN', { maximumFractionDigits: 0 })}`;
+
+  const durationData = [
+    { stage: 'Drafts', val: jobs.filter(j => j.status === 'Drafting').length },
+    { stage: 'Compliance', val: jobs.filter(j => j.status === 'Compliance').length },
+    { stage: 'L10N', val: jobs.filter(j => j.status === 'Localization').length },
+    { stage: 'Pending', val: jobs.filter(j => j.status === 'Pending').length },
+    { stage: 'Publish', val: jobs.filter(j => j.status === 'Publishing' || j.status === 'Published').length },
+  ];
+
   return (
     <div className="p-8 h-full flex flex-col gap-6 w-full max-w-[1400px] mx-auto overflow-y-auto">
       <div className="flex justify-between items-center mb-2">
@@ -28,24 +64,24 @@ export function AnalyticsView() {
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <KPICard 
           title="Avg Turnaround" 
-          value="4h 12m" 
-          trend="-15%" 
-          positive={true} 
+          value={avgTurnaround} 
+          trend={totalJobs > 0 ? "Live" : "-"}
+          positive={avgTurnaroundMs < 3600000 * 5} 
           icon={<Clock className="w-5 h-5 text-indigo-500 dark:text-zinc-400" />} 
         />
         <KPICard 
           title="Compliance Rating" 
-          value="98.2%" 
-          trend="+2.1%" 
-          positive={true} 
+          value={complianceRating} 
+          trend={totalJobs > 0 ? "Live" : "-"} 
+          positive={complianceRatingVal >= 90} 
           icon={<ShieldAlert className="w-5 h-5 text-indigo-500 dark:text-zinc-400" />} 
         />
         <KPICard 
           title="Cost Reduction" 
-          value="$14,200" 
-          trend="+12%" 
+          value={costReduction} 
+          trend={totalJobs > 0 ? "Live" : "-"} 
           positive={true} 
-          icon={<DollarSign className="w-5 h-5 text-indigo-500 dark:text-zinc-400" />} 
+          icon={<IndianRupee className="w-5 h-5 text-indigo-500 dark:text-zinc-400" />} 
         />
       </div>
 
@@ -53,10 +89,9 @@ export function AnalyticsView() {
         {/* Charts */}
         <div className="lg:col-span-2 bg-white dark:bg-[#141417] border border-slate-200 dark:border-[#27272a]/60 rounded-2xl p-6 shadow-sm dark:shadow-none ring-1 ring-inset ring-transparent dark:ring-white/5 flex flex-col">
           <div className="flex items-center justify-between border-b border-slate-200 dark:border-[#27272a]/50 pb-4 mb-6">
-            <h2 className="text-[13px] font-medium text-slate-700 dark:text-zinc-300">Phase Completion Times</h2>
+            <h2 className="text-[13px] font-medium text-slate-700 dark:text-zinc-300">Active Pipeline Load</h2>
             <div className="flex bg-slate-50 dark:bg-[#0f0f12] rounded-lg p-1 border border-slate-200 dark:border-[#27272a]/40">
-              <button className="px-3 py-1 text-xs text-slate-800 dark:text-black bg-white rounded-md font-medium shadow-sm">ms</button>
-              <button className="px-3 py-1 text-xs text-slate-500 dark:text-zinc-400 font-medium hover:text-slate-700 dark:hover:text-white rounded-md transition">sec</button>
+              <button className="px-3 py-1 text-xs text-slate-800 dark:text-black bg-white rounded-md font-medium shadow-sm">count</button>
             </div>
           </div>
           <div className="flex-1 min-h-[300px]">
@@ -112,15 +147,15 @@ export function AnalyticsView() {
             <div className="flex flex-col gap-2">
               <span className="text-[10px] uppercase font-mono tracking-widest text-rose-600 dark:text-[#f87171]">Bottleneck Alert</span>
               <p className="text-[13px] text-slate-700 dark:text-zinc-300 leading-relaxed pl-3 border-l-2 border-rose-200 dark:border-[#f87171]/40">
-                <span className="text-slate-900 dark:text-white font-semibold flex items-center gap-1.5"><StopCircle className="w-3 h-3 text-rose-600 dark:text-[#f87171]"/> Approval Node</span> 
-                is causing a 35% variance in standard cycle times.
+                <span className="text-slate-900 dark:text-white font-semibold flex items-center gap-1.5"><StopCircle className="w-3 h-3 text-rose-600 dark:text-[#f87171]"/> {jobs.filter(j => j.status === 'Pending').length > 0 ? "Pending Node" : "Pipeline Node"}</span> 
+                is showing activity proportional to active pending jobs array size.
               </p>
             </div>
 
             <div className="flex flex-col gap-2 mt-6">
               <span className="text-[10px] uppercase font-mono tracking-widest text-emerald-600 dark:text-[#34d399]">Optimization Verified</span>
               <p className="text-[13px] text-slate-700 dark:text-zinc-300 leading-relaxed pl-3 border-l-2 border-emerald-200 dark:border-[#34d399]/40">
-                 Localization routing has improved efficiency by <span className="text-slate-900 dark:text-white font-semibold">12%</span> since enabling concurrent European translation streams.
+                 Localization routing has active {jobs.filter(j => j.status === 'Localization').length} missions dynamically updating streams.
               </p>
             </div>
           </div>
