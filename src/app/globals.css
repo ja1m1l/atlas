@@ -19,6 +19,16 @@ body {
   font-family: var(--font-sans);
 }
 
+/* Hide scrollbars globally but keep scroll functionality */
+* {
+  scrollbar-width: none; /* Firefox */
+  -ms-overflow-style: none; /* IE and Edge */
+}
+
+*::-webkit-scrollbar {
+  display: none; /* Chrome, Safari and Opera */
+}
+
 @layer components {
   .atlas-card {
     background-color: var(--color-atlas-panel);
