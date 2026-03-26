@@ -78,6 +78,15 @@ def compliance_node(state: ContentOpsState) -> ContentOpsState:
             "severity": "warn"
         }).execute()
         
+        supabase.table("audit_logs").insert({
+            "organization_id": state["org_id"],
+            "job_id": state["job_id"],
+            "actor": "Compliance Engine",
+            "action": "Compliance REJECTED",
+            "status": "fail",
+            "topic": state.get("topic", "Mission Compliance")
+        }).execute()
+        
         # We will let the Graph conditional edge decide to retry or fail permanently.
     else:
         # Success
@@ -88,6 +97,15 @@ def compliance_node(state: ContentOpsState) -> ContentOpsState:
             "agent_name": "Compliance Engine",
             "message": "Validation SUCCESS. Zero constraints blocked. Sending to Localization.",
             "severity": "info"
+        }).execute()
+
+        supabase.table("audit_logs").insert({
+            "organization_id": state["org_id"],
+            "job_id": state["job_id"],
+            "actor": "Compliance Engine",
+            "action": "Compliance CLEARED",
+            "status": "success",
+            "topic": state.get("topic", "Mission Compliance")
         }).execute()
 
     return state

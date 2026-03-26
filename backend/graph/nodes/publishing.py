@@ -5,72 +5,111 @@ from datetime import datetime
 from backend.supabase_client import get_supabase_client
 from backend.graph.state import ContentOpsState
 
-BUFFER_API_BASE = "https://api.bufferapp.com/1"
-
 
 def _get_buffer_profiles(access_token: str) -> list:
-    """Fetch all connected Buffer profiles (social accounts)."""
+    """Fetch all connected Buffer profiles (social accounts) via GraphQL."""
+    url = "https://api.buffer.com"
+    headers = {
+        "Authorization": f"Bearer {access_token}",
+        "Content-Type": "application/json",
+    }
+    query = """
+    query GetChannels {
+      account {
+        channels {
+          id
+          name
+          service
+        }
+      }
+    }
+    """
     try:
-        resp = requests.get(
-            f"{BUFFER_API_BASE}/profiles.json",
-            params={"access_token": access_token},
-            timeout=10,
-        )
+        resp = requests.post(url, headers=headers, json={"query": query}, timeout=15)
         if resp.status_code == 200:
-            return resp.json()
-    except Exception:
-        pass
+            data = resp.json()
+            channels = data.get("data", {}).get("account", {}).get("channels", [])
+            print(f"[Buffer] Found {len(channels)} channels: {[c['service'] for c in channels]}")
+            return channels
+    except Exception as e:
+        print(f"[Buffer] Error fetching profiles: {e}")
     return []
 
 
-def _publish_to_buffer(access_token: str, profile_ids: list, text: str, now: bool = True) -> dict:
-    """Create an update on Buffer for the given profile IDs.
+def _publish_to_buffer_graphql(access_token: str, channel_id: str, text: str, service: str, image_url: str = "") -> dict:
+    """Create a post on Buffer via GraphQL API."""
+    url = "https://api.buffer.com"
+    headers = {
+        "Authorization": f"Bearer {access_token}",
+        "Content-Type": "application/json",
+    }
     
-    Buffer API: POST /updates/create.json
-    - profile_ids[]: array of profile IDs to post to
-    - text: the post content
-    - now: if True, share immediately instead of adding to queue
-    """
-    try:
-        data = {
-            "text": text,
-            "now": str(now).lower(),
-            "access_token": access_token,
+    # Full mutation with ALL error types from PostActionPayload union
+    mutation = """
+    mutation CreatePost($input: CreatePostInput!) {
+      createPost(input: $input) {
+        ... on PostActionSuccess {
+          post {
+            id
+          }
         }
-        # Buffer expects profile_ids as repeated form fields: profile_ids[]=x&profile_ids[]=y
-        for pid in profile_ids:
-            data[f"profile_ids[]"] = pid  # single profile per call for reliability
+        ... on NotFoundError {
+          message
+        }
+        ... on UnauthorizedError {
+          message
+        }
+        ... on UnexpectedError {
+          message
+        }
+        ... on RestProxyError {
+          message
+        }
+        ... on LimitReachedError {
+          message
+        }
+        ... on InvalidInputError {
+          message
+        }
+      }
+    }
+    """
+    
+    input_data = {
+        "text": text,
+        "channelId": channel_id,
+        "mode": "shareNow",
+        "schedulingType": "automatic"
+    }
+    
+    # Platform-specific adjustments
+    if image_url:
+        input_data["assets"] = {
+            "images": [{"url": image_url}]
+        }
+    elif service == "instagram":
+        # Fallback for Instagram if no user image provided
+        input_data["assets"] = {
+            "images": [{"url": "https://picsum.photos/1080/1080"}]
+        }
 
-        resp = requests.post(
-            f"{BUFFER_API_BASE}/updates/create.json",
-            data=data,
-            timeout=15,
-        )
-        return resp.json()
+    if service == "instagram":
+        input_data["metadata"] = {
+            "instagram": {"type": "post", "shouldShareToFeed": True}
+        }
+    elif service == "threads":
+        input_data["metadata"] = {
+            "threads": {"type": "post"}
+        }
+
+    try:
+        resp = requests.post(url, headers=headers, json={"query": mutation, "variables": {"input": input_data}}, timeout=30)
+        result = resp.json()
+        print(f"[Buffer] {service} ({channel_id}): status={resp.status_code}, response={json.dumps(result)[:300]}")
+        return result
     except Exception as e:
-        return {"success": False, "error": str(e)}
-
-
-def _publish_to_buffer_multi(access_token: str, profile_ids: list, text: str, now: bool = True) -> list:
-    """Post to multiple profiles individually for reliability."""
-    results = []
-    for pid in profile_ids:
-        try:
-            data = {
-                "text": text,
-                "now": str(now).lower(),
-                "access_token": access_token,
-                "profile_ids[]": pid,
-            }
-            resp = requests.post(
-                f"{BUFFER_API_BASE}/updates/create.json",
-                data=data,
-                timeout=15,
-            )
-            results.append({"profile_id": pid, "response": resp.json()})
-        except Exception as e:
-            results.append({"profile_id": pid, "error": str(e)})
-    return results
+        print(f"[Buffer] {service} ({channel_id}): error={e}")
+        return {"error": str(e)}
 
 
 def _publish_to_contentful(state: ContentOpsState) -> dict:
@@ -108,211 +147,143 @@ def _publish_to_contentful(state: ContentOpsState) -> dict:
     return {}
 
 
-def _create_buffer_idea(access_token: str, title: str, text: str) -> dict:
-    """Create a Buffer Idea via GraphQL API."""
-    url = "https://api.bufferapp.com/graphql"
-    headers = {
-        "Authorization": f"Bearer {access_token}",
-        "Content-Type": "application/json",
-    }
-    
-    mutation = """
-    mutation CreateIdea($input: CreateIdeaInput!) {
-      createIdea(input: $input) {
-        ... on Idea {
-          id
-          content {
-            title
-            text
-          }
-        }
-      }
-    }
-    """
-    
-    variables = {
-        "input": {
-            "organizationId": "69c53b6811e07e49d3fcee55",
-            "content": {
-                "title": title,
-                "text": text
-            }
-        }
-    }
-    
+def _log_deployment(state: dict, message: str, severity: str = "info"):
+    """Internal helper to log deployment status."""
     try:
-        resp = requests.post(url, headers=headers, json={"query": mutation, "variables": variables}, timeout=15)
-        return resp.json()
+        supabase = get_supabase_client()
+        supabase.table("agent_logs").insert({
+            "job_id": state["job_id"],
+            "organization_id": state["org_id"],
+            "agent_name": "Deployment Auth",
+            "message": message,
+            "severity": severity,
+        }).execute()
     except Exception as e:
-        return {"error": str(e)}
+        print(f"[Log] Failed to write agent log: {e}")
 
 
 def publishing_node(state: ContentOpsState) -> ContentOpsState:
     """Node 5: Publishing
     
-    - Buffer API: Post LinkedIn/Twitter content via connected profiles.
-    - Buffer GraphQL: Create an Idea for cross-platform review.
+    - Buffer GraphQL: Post to Instagram, Threads via connected profiles.
     - Contentful CMS: Push long-form blog post.
     """
     supabase = get_supabase_client()
     buffer_token = os.environ.get("BUFFER_ACCESS_TOKEN", "")
 
-    supabase.table("agent_logs").insert({
-        "job_id": state["job_id"],
-        "organization_id": state["org_id"],
-        "agent_name": "Deployment Auth",
-        "message": "Approval confirmed. Initiating multi-channel deployment...",
-        "severity": "info",
-    }).execute()
+    _log_deployment(state, "Approval confirmed. Initiating multi-channel deployment...")
 
-    published_urls = {}
+    published_channels = []
+    failed_channels = []
     variants = state.get("channel_variants", {})
+    user_image_url = state.get("image_url", "")
 
     # ── Buffer: Social Media Publishing ──
     if buffer_token:
-        # Create a Buffer Idea first (Synchronous for insurance)
-        idea_res = _create_buffer_idea(buffer_token, state.get("topic", "New Idea"), state.get("draft_text", ""))
-        if idea_res.get("data", {}).get("createIdea"):
-            published_urls["buffer_idea"] = "Created in Buffer Ideas"
-            supabase.table("agent_logs").insert({
-                "job_id": state["job_id"],
-                "organization_id": state["org_id"],
-                "agent_name": "Deployment Auth",
-                "message": "Mission exported to Buffer Ideas queue via GraphQL.",
-                "severity": "info",
-            }).execute()
-
         profiles = _get_buffer_profiles(buffer_token)
-        # ... (rest of social logic remains same)
-
-        # Separate profiles by service
-        twitter_profiles = [p["id"] for p in profiles if p.get("service") in ("twitter", "x")]
-        linkedin_profiles = [p["id"] for p in profiles if p.get("service") == "linkedin"]
-        instagram_profiles = [p["id"] for p in profiles if p.get("service") == "instagram"]
-        threads_profiles = [p["id"] for p in profiles if p.get("service") == "threads"]
-
-        # Post LinkedIn variant
-        if linkedin_profiles and variants.get("linkedin"):
-            results = _publish_to_buffer_multi(buffer_token, linkedin_profiles, variants["linkedin"])
-            for r in results:
-                if r.get("response", {}).get("success"):
-                    published_urls["linkedin"] = "Published via Buffer"
-                    supabase.table("agent_logs").insert({
-                        "job_id": state["job_id"],
-                        "organization_id": state["org_id"],
-                        "agent_name": "Deployment Auth",
-                        "message": f"LinkedIn post dispatched via Buffer (profile {r['profile_id']}).",
-                        "severity": "info",
-                    }).execute()
-
-        # Post Twitter variant
-        if twitter_profiles and variants.get("twitter"):
-            results = _publish_to_buffer_multi(buffer_token, twitter_profiles, variants["twitter"])
-            for r in results:
-                if r.get("response", {}).get("success"):
-                    published_urls["twitter"] = "Published via Buffer"
-                    supabase.table("agent_logs").insert({
-                        "job_id": state["job_id"],
-                        "organization_id": state["org_id"],
-                        "agent_name": "Deployment Auth",
-                        "message": f"Twitter/X post dispatched via Buffer (profile {r['profile_id']}).",
-                        "severity": "info",
-                    }).execute()
-
-        # Post Instagram variant (requires image)
-        if instagram_profiles and variants.get("instagram"):
-            # Buffer requires a media object for Instagram
-            image_url = "https://images.unsplash.com/photo-1614850523296-d8c1af93d400?q=80&w=1000&auto=format&fit=crop" # Brand Placeholder
-            results = []
-            for pid in instagram_profiles:
-                try:
-                    data = {
-                        "text": variants["instagram"],
-                        "now": "true",
-                        "access_token": buffer_token,
-                        "profile_ids[]": pid,
-                        "media[photo]": image_url
-                    }
-                    resp = requests.post(f"{BUFFER_API_BASE}/updates/create.json", data=data, timeout=15)
-                    results.append({"profile_id": pid, "response": resp.json()})
-                except Exception as e:
-                    results.append({"profile_id": pid, "error": str(e)})
-
-            for r in results:
-                if r.get("response", {}).get("success"):
-                    published_urls["instagram"] = "Published via Buffer"
-                    supabase.table("agent_logs").insert({
-                        "job_id": state["job_id"],
-                        "organization_id": state["org_id"],
-                        "agent_name": "Deployment Auth",
-                        "message": f"Instagram post dispatched via Buffer (profile {r['profile_id']}).",
-                        "severity": "info",
-                    }).execute()
-
-        # Post Threads variant
-        if threads_profiles and variants.get("threads"):
-            results = _publish_to_buffer_multi(buffer_token, threads_profiles, variants["threads"])
-            for r in results:
-                if r.get("response", {}).get("success"):
-                    published_urls["threads"] = "Published via Buffer"
-                    supabase.table("agent_logs").insert({
-                        "job_id": state["job_id"],
-                        "organization_id": state["org_id"],
-                        "agent_name": "Deployment Auth",
-                        "message": f"Threads post dispatched via Buffer (profile {r['profile_id']}).",
-                        "severity": "info",
-                    }).execute()
-
-        if not profiles:
-            supabase.table("agent_logs").insert({
-                "job_id": state["job_id"],
-                "organization_id": state["org_id"],
-                "agent_name": "Deployment Auth",
-                "message": "No Buffer profiles connected. Skipping social publishing.",
-                "severity": "warn",
-            }).execute()
+        
+        if profiles:
+            _log_deployment(state, f"Buffer sync complete. Found {len(profiles)} channel(s): {', '.join([p['service'] for p in profiles])}.")
+            
+            # Separate profiles by service
+            instagram_profiles = [p for p in profiles if p.get("service") == "instagram"]
+            threads_profiles = [p for p in profiles if p.get("service") == "threads"]
+            
+            # Determine content for each platform
+            instagram_text = variants.get("instagram", variants.get("linkedin", state.get("draft_text", "")))
+            threads_text = variants.get("threads", variants.get("twitter", state.get("draft_text", "")))
+            
+            # ── Post to Instagram ──
+            for profile in instagram_profiles:
+                cid = profile["id"]
+                _log_deployment(state, f"Dispatching to Instagram ({cid})...")
+                result = _publish_to_buffer_graphql(buffer_token, cid, instagram_text, "instagram", user_image_url)
+                
+                errors = result.get("errors", [])
+                create_post = result.get("data", {}).get("createPost", {})
+                post_id = create_post.get("post", {}).get("id") if create_post and "post" in create_post else None
+                error_message = create_post.get("message") if create_post else None
+                
+                if errors:
+                    err_msg = errors[0].get("message", "Unknown GraphQL error")
+                    failed_channels.append("instagram")
+                    _log_deployment(state, f"Instagram FAILED (GraphQL): {err_msg}", "error")
+                elif error_message:
+                    failed_channels.append("instagram")
+                    _log_deployment(state, f"Instagram FAILED: {error_message}", "error")
+                elif post_id:
+                    published_channels.append("instagram")
+                    _log_deployment(state, f"Instagram post PUBLISHED (post_id: {post_id}).")
+                else:
+                    # Buffer returned 200 with createPost but no post id and no message — treat as accepted
+                    published_channels.append("instagram")
+                    _log_deployment(state, f"Instagram post ACCEPTED and queued.")
+            
+            # ── Post to Threads ──
+            for profile in threads_profiles:
+                cid = profile["id"]
+                _log_deployment(state, f"Dispatching to Threads ({cid})...")
+                result = _publish_to_buffer_graphql(buffer_token, cid, threads_text, "threads", user_image_url)
+                
+                errors = result.get("errors", [])
+                create_post = result.get("data", {}).get("createPost", {})
+                post_id = create_post.get("post", {}).get("id") if create_post and "post" in create_post else None
+                error_message = create_post.get("message") if create_post else None
+                
+                if errors:
+                    err_msg = errors[0].get("message", "Unknown GraphQL error")
+                    failed_channels.append("threads")
+                    _log_deployment(state, f"Threads FAILED (GraphQL): {err_msg}", "error")
+                elif error_message:
+                    failed_channels.append("threads")
+                    _log_deployment(state, f"Threads FAILED: {error_message}", "error")
+                elif post_id:
+                    published_channels.append("threads")
+                    _log_deployment(state, f"Threads post PUBLISHED (post_id: {post_id}).")
+                else:
+                    published_channels.append("threads")
+                    _log_deployment(state, f"Threads post ACCEPTED and queued.")
+        else:
+            _log_deployment(state, "No Buffer channels found. Skipping social publishing.", "warn")
     else:
-        supabase.table("agent_logs").insert({
-            "job_id": state["job_id"],
-            "organization_id": state["org_id"],
-            "agent_name": "Deployment Auth",
-            "message": "BUFFER_ACCESS_TOKEN not set. Social publishing skipped.",
-            "severity": "warn",
-        }).execute()
+        _log_deployment(state, "BUFFER_ACCESS_TOKEN not set. Social publishing skipped.", "warn")
 
     # ── Contentful CMS ──
     contentful_result = _publish_to_contentful(state)
     if contentful_result:
-        published_urls["contentful"] = contentful_result.get("contentful_url", "")
-        supabase.table("agent_logs").insert({
-            "job_id": state["job_id"],
-            "organization_id": state["org_id"],
-            "agent_name": "Deployment Auth",
-            "message": f"Contentful entry created: {contentful_result.get('contentful_entry_id')}",
-            "severity": "info",
-        }).execute()
+        published_channels.append("contentful")
+        _log_deployment(state, f"Contentful entry created: {contentful_result.get('contentful_entry_id')}")
 
     # ── Finalize ──
-    supabase.table("jobs").update({
-        "status": "Published",
-        "progress": 100,
-    }).eq("id", state["job_id"]).execute()
+    channel_summary = ', '.join(published_channels) if published_channels else 'none'
+    failed_summary = ', '.join(failed_channels) if failed_channels else 'none'
+    
+    _log_deployment(state, f"TRANSMISSION COMPLETE. Published to: [{channel_summary}]. Failed: [{failed_summary}].")
 
-    supabase.table("agent_logs").insert({
-        "job_id": state["job_id"],
-        "organization_id": state["org_id"],
-        "agent_name": "Deployment Auth",
-        "message": f"Transmission verified. Content live on {len(published_urls)} channel(s): {', '.join(published_urls.keys()) or 'none'}.",
-        "severity": "info",
-    }).execute()
+    # Persist final state
+    try:
+        supabase.table("jobs").update({
+            "status": "Published",
+            "progress": 100
+        }).eq("id", state["job_id"]).execute()
+    except Exception as e:
+        _log_deployment(state, f"Failed to persist final job state: {str(e)}", "error")
 
-    supabase.table("audit_logs").insert({
-        "organization_id": state["org_id"],
-        "job_id": state["job_id"],
-        "action": "PUBLISH_COMPLETE",
-        "actor": "AGENT_PUBLISH",
-        "status": "success",
-        "metadata": json.dumps({"published_urls": published_urls}),
-    }).execute()
+    # Audit log with details
+    try:
+        supabase.table("audit_logs").insert({
+            "organization_id": state["org_id"],
+            "job_id": state["job_id"],
+            "action": "PUBLISH_COMPLETE",
+            "actor": "AGENT_PUBLISH",
+            "status": "success",
+            "topic": state.get("topic", ""),
+        }).execute()
+    except Exception as e:
+        print(f"[Audit] Failed to write audit log: {e}")
+
+    # Store results in state for downstream use
+    state["published_channels"] = published_channels
+    state["failed_channels"] = failed_channels
 
     return state

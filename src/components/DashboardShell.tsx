@@ -7,6 +7,7 @@ import { Sun, Moon, User, Plus } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { GlobeLogo } from './GlobeLogo';
 import { NewJobModal } from './NewJobModal';
+import Aurora from './Aurora';
 
 const TABS = [
   { id: 'PIPELINE', label: 'PIPELINE', href: '/pipeline' },
@@ -32,9 +33,21 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
   const activeTab = TABS.find(tab => pathname.startsWith(tab.href))?.id || 'PIPELINE';
 
   return (
-    <div className={`min-h-screen transition-colors duration-300 font-sans overflow-hidden flex flex-col items-center p-2 sm:p-6 ${isDarkMode ? 'bg-[#050505] text-[#e4e4e7]' : 'bg-slate-100 text-slate-900'}`}>
+    <div className={`min-h-screen transition-colors duration-300 font-sans overflow-hidden flex flex-col items-center p-2 sm:p-6 relative ${isDarkMode ? 'text-[#e4e4e7]' : 'text-slate-900'}`}>
       
-      <header className="flex w-full items-center justify-between px-4 pb-6 max-w-[1440px] pt-4 sm:pt-0">
+      {/* Background Layers */}
+      <div className={`fixed inset-0 transition-colors duration-300 ${isDarkMode ? 'bg-[#050505]' : 'bg-slate-100'}`} />
+      
+      <div className="fixed inset-0 z-0 pointer-events-none opacity-40 dark:opacity-60 select-none overflow-hidden">
+        <Aurora
+          colorStops={["#00a3d7","#b51a00","#b92d5d"]}
+          blend={0.5}
+          amplitude={1.1}
+          speed={0.8}
+        />
+      </div>
+
+      <header className="flex w-full items-center justify-between px-4 pb-6 max-w-[1440px] pt-4 sm:pt-0 relative z-20">
         <div className="flex items-center gap-1.5">
           <GlobeLogo />
           <div className="flex flex-col justify-center relative">
@@ -150,7 +163,7 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
         </div>
       </header>
 
-      <main className="w-full flex-1 max-w-[1440px] bg-white dark:bg-[#0c0c0e]/80 backdrop-blur-3xl rounded-3xl border border-slate-200 dark:border-[#27272a]/40 shadow-xl dark:shadow-2xl overflow-hidden ring-1 ring-inset ring-slate-100 dark:ring-white/5 flex flex-col relative h-[calc(100vh-8rem)] transition-colors duration-300">
+      <main className="w-full flex-1 max-w-[1440px] bg-white dark:bg-[#0c0c0e]/80 backdrop-blur-3xl rounded-3xl border border-slate-200 dark:border-[#27272a]/40 shadow-xl dark:shadow-2xl overflow-hidden ring-1 ring-inset ring-slate-100 dark:ring-white/5 flex flex-col relative z-10 h-[calc(100vh-8rem)] transition-colors duration-300">
         <div className="flex-1 relative overflow-hidden flex flex-col bg-transparent">
           {children}
         </div>

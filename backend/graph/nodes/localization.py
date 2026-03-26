@@ -109,4 +109,13 @@ def localization_node(state: ContentOpsState) -> ContentOpsState:
         "severity": "info"
     }).execute()
 
+    supabase.table("audit_logs").insert({
+        "organization_id": state["org_id"],
+        "job_id": state["job_id"],
+        "actor": "L10N Network",
+        "action": "Localization COMPLETED",
+        "status": "success",
+        "topic": state.get("topic", "Mission Localization")
+    }).execute()
+
     return state

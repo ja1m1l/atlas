@@ -15,6 +15,9 @@ export interface Job {
   progress: number;
   complianceIssues: number;
   createdAt: string;
+  outputContent?: Record<string, string>;
+  imageUrl?: string;
+  publishedChannels?: string[];
   agentLogs?: { agent: string, message: string, time: string }[];
 }
 
@@ -110,6 +113,9 @@ export const JobProvider = ({ children }: { children: ReactNode }) => {
         progress: j.progress,
         complianceIssues: j.compliance_issues,
         createdAt: j.created_at,
+        outputContent: j.output_content,
+        imageUrl: j.image_url,
+        publishedChannels: j.published_channels,
         agentLogs: (logsData || [])
           .filter(l => l.job_id === j.id)
           .map(l => ({ agent: l.agent_name, message: l.message, time: l.created_at }))
@@ -138,6 +144,9 @@ export const JobProvider = ({ children }: { children: ReactNode }) => {
               progress: newJob.progress,
               complianceIssues: newJob.compliance_issues,
               createdAt: newJob.created_at,
+              outputContent: newJob.output_content,
+              imageUrl: newJob.image_url,
+              publishedChannels: newJob.published_channels,
             }
           });
         }

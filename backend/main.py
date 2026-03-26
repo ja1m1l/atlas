@@ -16,7 +16,7 @@ import logging
 from contextlib import asynccontextmanager
 from datetime import datetime
 
-from fastapi import FastAPI, BackgroundTasks, Request
+from fastapi import FastAPI, BackgroundTasks, Request, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 from typing import List, Optional
@@ -57,10 +57,13 @@ def poll_for_approved_jobs():
                 "job_id": job["id"],
                 "org_id": job["organization_id"],
                 "topic": job.get("topic", ""),
+                "objective": job.get("objective", ""),
                 "audience": job.get("audience", ""),
+                "channels": job.get("channels", []),
                 "target_languages": job.get("languages", ["EN"]),
                 "spec_text": "",
                 "draft_text": "",
+                "image_url": "",
                 "channel_variants": {},
                 "compliance_result": {},
                 "compliance_retries": 0,
@@ -137,9 +140,12 @@ async def catch_exceptions_middleware(request: Request, call_next):
 class PipelineStartRequest(BaseModel):
     organization_id: str
     topic: str
+    objective: str
     audience: str
+    channels: List[str] = Field(default=["Instagram", "Threads", "LinkedIn", "Twitter"])
     languages: List[str] = Field(default=["EN"])
     spec_text: str = ""
+    image_url: str = ""
 
 class PipelineStartResponse(BaseModel):
     job_id: str
@@ -186,64 +192,111 @@ async def health():
     return {"status": "ok", "service": "atlasops-backend", "ts": datetime.utcnow().isoformat()}
 
 
+@app.post("/api/upload")
+async def upload_file(file: UploadFile = File(...)):
+    """Upload a file to Supabase Storage and return its public URL."""
+    try:
+        supabase = get_supabase_client()
+        file_bytes = await file.read()
+        ext = file.filename.split(".")[-1] if "." in file.filename else "png"
+        storage_path = f"uploads/{uuid.uuid4()}.{ext}"
+        
+        logger.info(f"[Upload] Bucket: mission-assets, File: {file.filename}, Type: {file.content_type}")
+        
+        # Check if bucket exists
+        try:
+            supabase.storage.get_bucket("mission-assets")
+        except:
+            logger.info("[Upload] Creating missing bucket: mission-assets")
+            supabase.storage.create_bucket("mission-assets", options={"public": True})
+
+        res = supabase.storage.from_("mission-assets").upload(
+            storage_path,
+            file_bytes,
+            file_options={"content-type": file.content_type or "image/png"}
+        )
+        
+        if hasattr(res, 'error') and res.error:
+            logger.error(f"[Upload] Supabase Error: {res.error}")
+            return {"error": str(res.error)}
+
+        public_url = supabase.storage.from_("mission-assets").get_public_url(storage_path)
+        logger.info(f"[Upload] File uploaded successfully: {public_url}")
+        return {"url": public_url, "path": storage_path}
+    except Exception as e:
+        logger.error(f"[Upload] Critical failure: {e}")
+        logger.error(traceback.format_exc())
+        return {"error": str(e)}
+
+
 @app.post("/api/pipeline/start", response_model=PipelineStartResponse)
 async def start_pipeline(req: PipelineStartRequest, background_tasks: BackgroundTasks):
-    """Create a new job row in Supabase and trigger the LangGraph pipeline."""
-    supabase = get_supabase_client()
+    try:
+        logger.info(f"Pipeline Start Request: {req.topic}")
+        supabase = get_supabase_client()
 
-    # Generate IDs
-    job_id = str(uuid.uuid4())
+        # Generate IDs
+        job_id = str(uuid.uuid4())
 
-    # Count existing jobs in org to generate display_id
-    existing = supabase.table("jobs").select("id", count="exact").eq("organization_id", req.organization_id).execute()
-    seq = (existing.count or 0) + 1
-    display_id = f"JOB-{seq:03d}"
+        # Count existing jobs in org to generate display_id
+        existing = supabase.table("jobs").select("id", count="exact").eq("organization_id", req.organization_id).execute()
+        seq = (existing.count or 0) + 1
+        display_id = f"JOB-{seq:03d}"
 
-    # Insert job row
-    supabase.table("jobs").insert({
-        "id": job_id,
-        "organization_id": req.organization_id,
-        "display_id": display_id,
-        "topic": req.topic,
-        "audience": req.audience,
-        "languages": req.languages,
-        "status": "Drafting",
-        "progress": 0,
-        "compliance_issues": 0,
-    }).execute()
+        # Insert job row
+        supabase.table("jobs").insert({
+            "id": job_id,
+            "organization_id": req.organization_id,
+            "display_id": display_id,
+            "topic": req.topic,
+            "audience": req.audience,
+            "languages": req.languages,
+            "status": "Drafting",
+            "progress": 0,
+            "compliance_issues": 0,
+        }).execute()
 
-    # Insert initial audit log
-    supabase.table("audit_logs").insert({
-        "organization_id": req.organization_id,
-        "job_id": job_id,
-        "job_display_id": display_id,
-        "topic": req.topic,
-        "action": "INITIATED",
-        "actor": "SYSTEM_ROUTER",
-        "status": "success",
-    }).execute()
+        # Insert initial audit log
+        supabase.table("audit_logs").insert({
+            "organization_id": req.organization_id,
+            "job_id": job_id,
+            "job_display_id": display_id,
+            "topic": req.topic,
+            "action": "INITIATED",
+            "actor": "SYSTEM_ROUTER",
+            "status": "success",
+        }).execute()
 
-    # Build initial graph state
-    initial_state = {
-        "job_id": job_id,
-        "org_id": req.organization_id,
-        "topic": req.topic,
-        "audience": req.audience,
-        "target_languages": req.languages,
-        "spec_text": req.spec_text,
-        "draft_text": "",
-        "channel_variants": {},
-        "compliance_result": {},
-        "compliance_retries": 0,
-        "localized_variants": {},
-        "approval_status": "",
-        "audit_log": [],
-    }
+        # Build initial graph state
+        initial_state = {
+            "job_id": job_id,
+            "org_id": req.organization_id,
+            "topic": req.topic,
+            "objective": req.objective,
+            "audience": req.audience,
+            "channels": req.channels,
+            "target_languages": req.languages,
+            "spec_text": req.spec_text,
+            "draft_text": "",
+            "image_url": req.image_url,
+            "channel_variants": {},
+            "compliance_result": {},
+            "compliance_retries": 0,
+            "localized_variants": {},
+            "approval_status": "",
+            "audit_log": [],
+        }
 
-    # Fire-and-forget: run the full pipeline in background
-    background_tasks.add_task(run_pipeline, initial_state)
+        # Fire-and-forget: run the full pipeline in background
+        background_tasks.add_task(run_pipeline, initial_state)
 
-    return PipelineStartResponse(job_id=job_id, display_id=display_id, status="Drafting")
+        return PipelineStartResponse(job_id=job_id, display_id=display_id, status="Drafting")
+
+    except Exception as e:
+        logger.error(f"Startup Failure: {e}")
+        logger.error(traceback.format_exc())
+        from fastapi import HTTPException
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.post("/webhook/publer")
@@ -306,10 +359,13 @@ async def approve_job(job_id: str, background_tasks: BackgroundTasks):
             "job_id": job_id,
             "org_id": job.data["organization_id"],
             "topic": job.data.get("topic", ""),
+            "objective": job.data.get("objective", ""),
             "audience": job.data.get("audience", ""),
+            "channels": job.data.get("channels", []),
             "target_languages": job.data.get("languages", ["EN"]),
             "spec_text": "",
             "draft_text": content.data[0]["body"] if content.data else "",
+            "image_url": "",
             "channel_variants": {},
             "compliance_result": {},
             "compliance_retries": 0,

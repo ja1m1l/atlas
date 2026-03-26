@@ -9,29 +9,58 @@ const LANGUAGES = ['EN', 'ES', 'FR', 'DE', 'JA'];
 export function NewJobModal({ onClose }: { onClose: () => void }) {
   const { dispatch } = useJobContext();
   const [topic, setTopic] = useState('');
+  const [objective, setObjective] = useState('');
   const [audience, setAudience] = useState('');
+  const [selectedChannels, setSelectedChannels] = useState<string[]>(['Instagram', 'Threads', 'LinkedIn', 'Twitter']);
   const [selectedLangs, setSelectedLangs] = useState<string[]>(['EN']);
   const [isHoveringFile, setIsHoveringFile] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [isUploading, setIsUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const uploadFile = async (file: File) => {
+    console.log('[AtlasOps] Uploading:', file.name);
+    const formData = new FormData();
+    formData.append('file', file);
+    const resp = await fetch('http://localhost:8080/api/upload', {
+      method: 'POST',
+      body: formData
+    });
+    const data = await resp.json();
+    return data.url;
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!topic || !audience) return;
+    if (!topic || !audience || isUploading) return;
 
     try {
+      setIsUploading(true);
+      let imageUrl = "";
+      
+      // If an image was selected, upload it first
+      if (selectedFile && selectedFile.type.startsWith('image/')) {
+        imageUrl = await uploadFile(selectedFile);
+      } else if (selectedFile) {
+        // Handle non-image files as context (impl pending full RAG)
+        await uploadFile(selectedFile);
+      }
+
       // For this hackathon demo, we use the default organization ID
       const organization_id = "02c4a65c-bad2-41b4-8e69-9aed1b2cca4a";
       
-      const response = await fetch('http://127.0.0.1:8000/api/pipeline/start', {
+      const response = await fetch('http://localhost:8080/api/pipeline/start', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           organization_id,
           topic,
+          objective,
           audience,
+          channels: selectedChannels,
           languages: selectedLangs,
-          spec_text: "" 
+          spec_text: "",
+          image_url: imageUrl
         })
       });
 
@@ -43,6 +72,8 @@ export function NewJobModal({ onClose }: { onClose: () => void }) {
     } catch (err) {
       console.error('Pipeline error:', err);
       alert('Mission deployment failed. Verify backend is active on port 8000.');
+    } finally {
+      setIsUploading(false);
     }
   };
 
@@ -101,22 +132,35 @@ export function NewJobModal({ onClose }: { onClose: () => void }) {
         <form onSubmit={handleSubmit} className="p-8 flex flex-col gap-6">
           <div className="flex flex-col gap-2">
             <label className="text-[11px] font-mono text-slate-500 dark:text-zinc-500 uppercase tracking-widest font-semibold flex items-center gap-2">
-              <FileText className="w-3.5 h-3.5" /> Mission Topic / Abstract
+              <FileText className="w-3.5 h-3.5" /> Mission Title
             </label>
             <input 
               type="text" 
               required
               value={topic}
               onChange={e => setTopic(e.target.value)}
-              placeholder="e.g. Q4 Earnings Press Release"
+              placeholder="e.g. Q4 Earnings Campaign"
               className="w-full bg-white dark:bg-[#141417] text-[14px] text-slate-900 dark:text-zinc-200 rounded-xl px-4 py-3 border border-slate-300 dark:border-[#27272a]/60 focus:outline-none focus:border-indigo-400 dark:focus:border-zinc-500 focus:bg-white dark:focus:bg-[#18181b] transition-colors shadow-inner"
+            />
+          </div>
+
+          <div className="flex flex-col gap-2">
+            <label className="text-[11px] font-mono text-slate-500 dark:text-zinc-500 uppercase tracking-widest font-semibold flex items-center gap-2">
+              <Target className="w-3.5 h-3.5" /> Primary Objective
+            </label>
+            <textarea 
+              required
+              value={objective}
+              onChange={e => setObjective(e.target.value)}
+              placeholder="Describe what you want to achieve with this mission..."
+              className="w-full h-24 bg-white dark:bg-[#141417] text-[14px] text-slate-900 dark:text-zinc-200 rounded-xl px-4 py-3 border border-slate-300 dark:border-[#27272a]/60 focus:outline-none focus:border-indigo-400 dark:focus:border-zinc-500 focus:bg-white dark:focus:bg-[#18181b] transition-colors shadow-inner resize-none"
             />
           </div>
 
           <div className="grid grid-cols-2 gap-6">
             <div className="flex flex-col gap-2">
               <label className="text-[11px] font-mono text-slate-500 dark:text-zinc-500 uppercase tracking-widest font-semibold flex items-center gap-2">
-                <Target className="w-3.5 h-3.5" /> Target Demographics
+                <Target className="w-3.5 h-3.5" /> Demographics
               </label>
               <input 
                 type="text" 
@@ -130,20 +174,20 @@ export function NewJobModal({ onClose }: { onClose: () => void }) {
             
             <div className="flex flex-col gap-2">
               <label className="text-[11px] font-mono text-slate-500 dark:text-zinc-500 uppercase tracking-widest font-semibold flex items-center gap-2">
-                <Globe2 className="w-3.5 h-3.5" /> Target Vectors (L10N)
+                <Globe2 className="w-3.5 h-3.5" /> Channels
               </label>
               <div className="flex flex-wrap gap-2 pt-1">
-                {LANGUAGES.map(lang => (
+                {['Instagram', 'Threads', 'LinkedIn', 'Twitter'].map(ch => (
                   <button
-                    key={lang}
+                    key={ch}
                     type="button"
-                    onClick={() => toggleLang(lang)}
-                    className={`px-3 py-1.5 rounded-lg text-[11px] font-mono font-bold transition-all border
-                      ${selectedLangs.includes(lang) 
-                        ? 'bg-indigo-600 text-white dark:bg-zinc-200 dark:text-black border-transparent shadow-sm' 
+                    onClick={() => setSelectedChannels(prev => prev.includes(ch) ? prev.filter(c => c !== ch) : [...prev, ch])}
+                    className={`px-3 py-1.5 rounded-lg text-[10px] font-mono font-bold transition-all border
+                      ${selectedChannels.includes(ch) 
+                        ? 'bg-emerald-600 text-white dark:bg-emerald-500/20 dark:text-emerald-400 border-emerald-500/30 shadow-sm' 
                         : 'bg-slate-50 text-slate-500 border-slate-200 hover:bg-slate-100 dark:bg-[#141417] dark:text-zinc-500 dark:border-[#27272a]/60 dark:hover:bg-[#18181b] dark:hover:border-zinc-600/50'}`}
                   >
-                    {lang}
+                    {ch}
                   </button>
                 ))}
               </div>
@@ -205,10 +249,10 @@ export function NewJobModal({ onClose }: { onClose: () => void }) {
             </button>
             <button 
               type="submit"
-              disabled={!topic || !audience || selectedLangs.length === 0}
+              disabled={!topic || !objective || !audience || selectedChannels.length === 0 || isUploading}
               className="px-6 py-2.5 bg-indigo-600 text-white hover:bg-indigo-700 dark:bg-white dark:text-black dark:hover:bg-zinc-200 transition-colors rounded-xl text-[13px] font-semibold disabled:opacity-50 tracking-wide shadow-sm"
             >
-              DEPLOY MISSION
+              {isUploading ? 'DEPLOYING...' : 'DEPLOY MISSION'}
             </button>
           </div>
         </form>

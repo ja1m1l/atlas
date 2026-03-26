@@ -18,15 +18,18 @@ def drafting_node(state: ContentOpsState) -> ContentOpsState:
     llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash", temperature=0.7)
     
     prompt = ChatPromptTemplate.from_messages([
-        ("system", "You are an expert B2B content creator. Generate a comprehensive drafting response in strictly valid JSON format without markdown code blocks."),
-        ("user", "Spec: {spec}\nTopic: {topic}\nAudience: {audience}\n\n"
+        ("system", "You are an expert B2B content creator. Your goal is to generate high-engagement, professional social media posts. "
+                   "Each post (LinkedIn, Instagram, Threads) should be a detailed, comprehensive update of approximately 80-100 words. "
+                   "Focus on tactical value, use a professional yet slightly italic/modern tone, and include relevant emojis and hashtags. "
+                   "Generate the response in strictly valid JSON format without markdown code blocks."),
+        ("user", "Mission Title: {topic}\nObjective: {objective}\nTarget Audience: {audience}\nContext Spec: {spec}\n\n"
          "Return a JSON object with these exact keys:\n"
-         "- 'draft_text': (string) The main long-form B2B blog post.\n"
-         "- 'linkedin_post': (string) A LinkedIn format post.\n"
-         "- 'instagram_post': (string) An Instagram caption with hashtags.\n"
-         "- 'threads_post': (string) A Threads format post.\n"
-         "- 'tweet': (string) A short tweet.\n"
-         "- 'email_subject': (string) An email subject line.")
+         "- 'draft_text': (string) The main long-form B2B analysis (300+ words).\n"
+         "- 'linkedin_post': (string) A comprehensive LinkedIn post (80-100 words).\n"
+         "- 'instagram_post': (string) An engaging Instagram caption with hashtags (80-100 words).\n"
+         "- 'threads_post': (string) A thoughtful Threads-format update (80-100 words).\n"
+         "- 'tweet': (string) A punchy, high-impact tweet (max 280 chars).\n"
+         "- 'email_subject': (string) A compelling email subject line.")
     ])
 
     chain = prompt | llm
@@ -38,6 +41,7 @@ def drafting_node(state: ContentOpsState) -> ContentOpsState:
     response = chain.invoke({
         "spec": state.get("spec_text", "") + feedback,
         "topic": state.get("topic", ""),
+        "objective": state.get("objective", ""),
         "audience": state.get("audience", "")
     })
     
@@ -80,6 +84,15 @@ def drafting_node(state: ContentOpsState) -> ContentOpsState:
         "agent_name": "Drafting Protocol",
         "message": "Drafting complete. Content payload constructed.",
         "severity": "info"
+    }).execute()
+
+    supabase.table("audit_logs").insert({
+        "organization_id": state["org_id"],
+        "job_id": state["job_id"],
+        "actor": "Drafting Protocol",
+        "action": "Draft Generated",
+        "status": "success",
+        "topic": state.get("topic", "Mission Drafting")
     }).execute()
 
     return state
