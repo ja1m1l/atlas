@@ -5,8 +5,8 @@ import { useJobContext } from '../../store/JobContext';
 import { Activity, Bot, Terminal, ShieldCheck, Globe, StopCircle, CheckCircle2, PlaySquare, Loader2, ServerCog, Workflow } from 'lucide-react';
 
 const AGENTS = [
-  { id: 'drafting', name: 'Drafting Protocol', role: 'Initial Generation', icon: <Bot className="w-5 h-5 text-indigo-500 dark:text-zinc-400" /> },
-  { id: 'compliance', name: 'Compliance Engine', role: 'Rule Validation', icon: <ShieldCheck className="w-5 h-5 text-indigo-500 dark:text-zinc-400" /> },
+  { id: 'drafting', name: 'DraftAgent', role: 'Initial Generation', icon: <Bot className="w-5 h-5 text-indigo-500 dark:text-zinc-400" /> },
+  { id: 'compliance', name: 'ComplianceAgent', role: 'Rule Validation', icon: <ShieldCheck className="w-5 h-5 text-indigo-500 dark:text-zinc-400" /> },
   { id: 'localization', name: 'L10N Network', role: 'Translation Matrix', icon: <Globe className="w-5 h-5 text-indigo-500 dark:text-zinc-400" /> },
   { id: 'approval', name: 'Approval Gate', role: 'Human-in-Loop', icon: <CheckCircle2 className="w-5 h-5 text-indigo-500 dark:text-zinc-400" /> },
   { id: 'publishing', name: 'Deployment Auth', role: 'Content Push', icon: <PlaySquare className="w-5 h-5 text-indigo-500 dark:text-zinc-400" /> }
@@ -17,8 +17,19 @@ export function AgentConstellation() {
 
   const allLogs = useMemo(() => {
     return state.jobs.flatMap(j => 
-       (j.agentLogs || []).map(log => ({ ...log, jobId: j.id }))
+       (j.agentLogs || []).map(log => ({ ...log, jobId: j.display_id || j.id.slice(0,8) }))
     ).sort((a, b) => new Date(b.time).getTime() - new Date(a.time).getTime());
+  }, [state.jobs]);
+
+  const activeAgents = useMemo(() => {
+    const active = new Set<string>();
+    state.jobs.forEach(j => {
+      if (j.status === 'Drafting') active.add('DraftAgent');
+      if (j.status === 'Compliance') active.add('ComplianceAgent');
+      if (j.status === 'Localization') active.add('L10N Network');
+      if (j.status === 'Publishing') active.add('Deployment Auth');
+    });
+    return active;
   }, [state.jobs]);
 
   return (
@@ -34,7 +45,7 @@ export function AgentConstellation() {
 
       <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4">
         {AGENTS.map((agent) => {
-          const isActive = Math.random() > 0.3 || state.jobs.length > 0;
+          const isActive = activeAgents.has(agent.name);
           return (
             <div key={agent.id} className="bg-white dark:bg-[#141417] border border-slate-200 dark:border-[#27272a]/60 rounded-2xl p-5 group transition-all shadow-sm dark:shadow-none ring-1 ring-inset ring-transparent dark:ring-white/5 hover:border-indigo-200 dark:hover:border-zinc-600/50">
               <div className="flex justify-between items-start mb-6">
@@ -58,12 +69,12 @@ export function AgentConstellation() {
               <div className="mt-auto space-y-2 relative">
                 <div className="flex justify-between text-[10px] font-mono text-slate-500 dark:text-zinc-400">
                   <span>LOAD ACCUMULATION</span>
-                  <span className={isActive ? 'text-indigo-600 dark:text-zinc-300' : ''}>{isActive ? Math.floor(Math.random() * 40 + 40) : 0}%</span>
+                  <span className={isActive ? 'text-indigo-600 dark:text-zinc-300' : ''}>{isActive ? 'High' : 'None'}</span>
                 </div>
                 {/* Hashed background bar */}
                 <div className="w-full h-1.5 flex gap-[1px]">
                   {Array.from({length: 40}).map((_, i) => {
-                    const threshold = isActive ? Math.floor(Math.random() * 40 + 40) : 0;
+                    const threshold = isActive ? 80 : 0;
                     const isFilled = (i / 40) * 100 < threshold;
                     return (
                       <div 

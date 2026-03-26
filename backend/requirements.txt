@@ -1,0 +1,11 @@
+fastapi
+uvicorn
+langgraph
+langchain
+langchain-anthropic
+langchain-google-genai
+supabase
+python-dotenv
+apscheduler
+resend
+requests

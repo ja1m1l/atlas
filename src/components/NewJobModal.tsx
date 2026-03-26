@@ -13,26 +13,35 @@ export function NewJobModal({ onClose }: { onClose: () => void }) {
   const [selectedLangs, setSelectedLangs] = useState<string[]>(['EN']);
   const [isHoveringFile, setIsHoveringFile] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!topic || !audience) return;
 
-    dispatch({
-      type: 'ADD_JOB',
-      payload: {
-        id: `JOB-${Math.floor(Math.random() * 1000).toString().padStart(3, '0')}`,
-        topic,
-        audience,
-        languages: selectedLangs,
-        status: 'Drafting',
-        progress: 0,
-        complianceIssues: 0,
-        agentLogs: [],
-        createdAt: new Date().toISOString()
-      } as any
-    });
+    try {
+      // For this hackathon demo, we use the default organization ID
+      const organization_id = "02c4a65c-bad2-41b4-8e69-9aed1b2cca4a";
+      
+      const response = await fetch('http://localhost:8000/api/pipeline/start', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          organization_id,
+          topic,
+          audience,
+          languages: selectedLangs,
+          spec_text: "" 
+        })
+      });
 
-    onClose();
+      if (!response.ok) throw new Error('Failed to start pipeline');
+      
+      // The JobContext uses Supabase real-time subscriptions, 
+      // so the new job will appear automatically on the board!
+      onClose();
+    } catch (err) {
+      console.error('Pipeline error:', err);
+      alert('Mission deployment failed. Verify backend is active on port 8000.');
+    }
   };
 
   const toggleLang = (lang: string) => {

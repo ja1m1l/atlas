@@ -1,31 +1,76 @@
 "use client";
 
-import React, { useState } from 'react';
-import { useJobContext } from '../../store/JobContext';
+import React, { useState, useEffect } from 'react';
+import { supabase } from '@/lib/supabase';
 import { Search, Filter, History, Download, MoreHorizontal } from 'lucide-react';
 
+interface AuditEntry {
+  id: string;
+  display_id?: string;
+  topic: string;
+  action: string;
+  actor: string;
+  time: string;
+  status: string;
+}
+
 export function AuditTrail() {
-  const { state } = useJobContext();
   const [searchTerm, setSearchTerm] = useState('');
+  const [logs, setLogs] = useState<AuditEntry[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  const auditLogs = [
-    ...state.jobs.map(j => ({
-      id: j.id,
-      topic: j.topic,
-      action: 'INITIATED',
-      user: 'SYSTEM_ROUTER',
-      time: j.createdAt,
-      status: 'success'
-    })),
-    { id: 'JOB-099', topic: 'Annual Review Draft', action: 'BLOCK_TRIGGER', user: 'AGENT_COMPLAINCE', time: new Date(Date.now() - 3600000 * 24).toISOString(), status: 'fail' },
-    { id: 'JOB-098', topic: 'EMEA Press Release', action: 'GATE_PASSED', user: 'HUMAN_APPROVER', time: new Date(Date.now() - 3600000 * 48).toISOString(), status: 'success' },
-    { id: 'JOB-097', topic: 'Q2 Website Update', action: 'DEPLOYED_EDGE', user: 'AGENT_PUBLISH', time: new Date(Date.now() - 3600000 * 72).toISOString(), status: 'success' },
-    { id: 'JOB-096', topic: 'Brand Guidelines', action: 'REVIEW_REQ', user: 'AGENT_L10N', time: new Date(Date.now() - 3600000 * 84).toISOString(), status: 'warning' },
-  ].sort((a, b) => new Date(b.time).getTime() - new Date(a.time).getTime());
+  useEffect(() => {
+    const fetchAuditLogs = async () => {
+      setLoading(true);
+      const { data, error } = await supabase
+        .from('audit_logs')
+        .select('*')
+        .order('created_at', { ascending: false });
 
-  const filteredLogs = auditLogs.filter(log => 
+      if (error) {
+        console.error('Audit fetch fault:', error);
+      } else {
+        setLogs((data || []).map(l => ({
+          id: l.job_id,
+          display_id: l.job_display_id,
+          topic: l.topic || 'System Maintenance',
+          action: l.action,
+          actor: l.actor,
+          time: l.created_at,
+          status: l.status
+        })));
+      }
+      setLoading(false);
+    };
+
+    fetchAuditLogs();
+
+    // Live subscription to audit logs
+    const channel = supabase
+      .channel('public:audit_logs')
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'audit_logs' }, payload => {
+        const l = payload.new as any;
+        setLogs(prev => [{
+          id: l.job_id,
+          display_id: l.job_display_id,
+          topic: l.topic || 'System Maintenance',
+          action: l.action,
+          actor: l.actor,
+          time: l.created_at,
+          status: l.status
+        }, ...prev]);
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, []);
+
+  const filteredLogs = logs.filter(log => 
     log.topic.toLowerCase().includes(searchTerm.toLowerCase()) || 
-    log.action.toLowerCase().includes(searchTerm.toLowerCase())
+    log.action.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    log.id?.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
   return (
@@ -69,13 +114,22 @@ export function AuditTrail() {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-[#27272a]/40 bg-transparent">
-              {filteredLogs.map((log, i) => (
+              {loading ? (
+                 <tr>
+                    <td colSpan={6} className="px-6 py-16 text-center">
+                       <div className="animate-spin w-5 h-5 border-2 border-indigo-500 border-t-transparent rounded-full mx-auto mb-2" />
+                       <p className="text-[10px] font-mono uppercase tracking-widest text-slate-400">Syncing History...</p>
+                    </td>
+                 </tr>
+              ) : filteredLogs.map((log, i) => (
                 <tr key={i} className="hover:bg-slate-50 dark:hover:bg-[#18181b]/80 transition-colors group cursor-default">
                   <td className="px-6 py-3.5 font-mono text-slate-600 dark:text-zinc-400 text-[12px]">
                     {new Date(log.time).toLocaleString([], { dateStyle: 'short', timeStyle: 'medium' })}
                   </td>
                   <td className="px-6 py-3.5">
-                    <span className="font-mono text-[10px] uppercase text-indigo-700 dark:text-zinc-300 bg-indigo-50 dark:bg-white/5 px-2 py-0.5 rounded border border-indigo-100 dark:border-white/10">{log.id}</span>
+                    <span className="font-mono text-[10px] uppercase text-indigo-700 dark:text-zinc-300 bg-indigo-50 dark:bg-white/5 px-2 py-0.5 rounded border border-indigo-100 dark:border-white/10">
+                      {log.display_id || (log.id ? log.id.slice(0, 8) : 'N/A')}
+                    </span>
                   </td>
                   <td className="px-6 py-3.5 font-medium text-slate-800 dark:text-zinc-200">{log.topic}</td>
                   <td className="px-6 py-3.5">
@@ -86,7 +140,7 @@ export function AuditTrail() {
                       {log.action}
                     </span>
                   </td>
-                  <td className="px-6 py-3.5 text-slate-500 dark:text-zinc-500 font-mono text-[11px]">{log.user}</td>
+                  <td className="px-6 py-3.5 text-slate-500 dark:text-zinc-500 font-mono text-[11px]">{log.actor}</td>
                   <td className="px-6 py-3.5 text-right w-10">
                     <button className="text-slate-400 dark:text-zinc-600 dark:hover:text-white transition-colors opacity-0 group-hover:opacity-100 px-2 py-1 bg-slate-100 dark:bg-[#27272a]/50 rounded-md">
                       <MoreHorizontal className="w-4 h-4" />
@@ -94,7 +148,7 @@ export function AuditTrail() {
                   </td>
                 </tr>
               ))}
-              {filteredLogs.length === 0 && (
+              {!loading && filteredLogs.length === 0 && (
                 <tr>
                   <td colSpan={6} className="px-6 py-16 text-center text-slate-500 dark:text-zinc-500 font-mono text-[12px]">
                     No matching telemetry packets found for "{searchTerm}"

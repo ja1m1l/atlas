@@ -42,7 +42,7 @@ export function PipelineBoard() {
                 >
                   <div className="flex justify-between items-start mb-3">
                     <span className="text-[10px] font-mono text-indigo-600 dark:text-zinc-400 bg-indigo-50 dark:bg-white/5 px-2 py-0.5 rounded-full border border-indigo-100 dark:border-white/10 uppercase tracking-wider">
-                      {job.id}
+                      {job.display_id || job.id.slice(0, 8)}
                     </span>
                     {job.complianceIssues > 0 && (
                       <span className="flex items-center gap-1 text-[10px] font-mono text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-500/10 px-1.5 py-0.5 rounded-sm border border-rose-100 dark:border-rose-500/20">
