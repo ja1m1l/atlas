@@ -160,9 +160,18 @@ export function AnalyticsView() {
             </div>
           </div>
           
-          <button className="w-full mt-auto py-3 bg-indigo-600 dark:bg-white text-white dark:text-black hover:bg-indigo-700 dark:hover:bg-zinc-200 transition-colors rounded-xl text-[13px] font-semibold flex items-center justify-center gap-2 relative z-10 shadow-sm dark:shadow-none">
-            <RefreshCcw className="w-4 h-4" /> Re-scan Matrix
-          </button>
+            <div className="flex flex-col gap-2 mt-6 pt-6 border-t border-indigo-100 dark:border-[#27272a]/40">
+              <span className="text-[10px] uppercase font-mono tracking-widest text-slate-400 dark:text-zinc-500">Mission Efficiency</span>
+              <p className="text-[13px] text-slate-700 dark:text-zinc-300 leading-relaxed font-medium">
+                Average swarm cycle: <span className="text-indigo-600 dark:text-zinc-200">{avgTurnaround}</span>
+              </p>
+              <div className="w-full h-1 bg-slate-100 dark:bg-white/5 rounded-full mt-1 overflow-hidden">
+                <div 
+                  className="h-full bg-indigo-500 dark:bg-zinc-400 transition-all duration-1000" 
+                  style={{ width: `${Math.min(100, Math.max(10, (1 - avgTurnaroundMs / (3600000 * 24)) * 100))}%` }}
+                />
+              </div>
+            </div>
         </div>
       </div>
     </div>

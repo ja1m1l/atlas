@@ -11,20 +11,34 @@ Background:
 """
 
 import os
+import io
 import uuid
 import logging
+import traceback
 from contextlib import asynccontextmanager
 from datetime import datetime
-
-from fastapi import FastAPI, BackgroundTasks, Request, UploadFile, File
-from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel, Field
 from typing import List, Optional
+
+from fastapi import FastAPI, BackgroundTasks, Request, UploadFile, File, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+from pydantic import BaseModel, Field
 from apscheduler.schedulers.background import BackgroundScheduler
 
 from backend.supabase_client import get_supabase_client
 from backend.graph.workflow import create_workflow
 from backend.graph.nodes.publishing import publishing_node
+
+# --- Pydantic Models for Compliance Management ---
+class TermRequest(BaseModel):
+    policy_id: str
+    term: str
+
+class PolicyRequest(BaseModel):
+    organization_id: str
+    name: str
+    schema_json: dict
+    is_active: bool = True
 
 # ---------------------------------------------------------------------------
 # Logging
@@ -43,8 +57,6 @@ def poll_for_approved_jobs():
     the lifecycle."""
     try:
         supabase = get_supabase_client()
-        # Look for jobs whose status has been flipped to 'Publishing' by the
-        # approval action in the frontend / API.
         jobs = (
             supabase.table("jobs")
             .select("id, organization_id, topic, audience, languages")
@@ -71,7 +83,6 @@ def poll_for_approved_jobs():
                 "approval_status": "approved",
                 "audit_log": [],
             }
-            # Fetch latest content body
             content = (
                 supabase.table("job_content")
                 .select("body")
@@ -87,10 +98,6 @@ def poll_for_approved_jobs():
     except Exception as e:
         logger.error(f"[Scheduler] Error polling approved jobs: {e}")
 
-
-# ---------------------------------------------------------------------------
-# Lifespan — start / stop the scheduler with the app
-# ---------------------------------------------------------------------------
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     scheduler.add_job(poll_for_approved_jobs, "interval", minutes=5, id="approval_poll")
@@ -99,7 +106,6 @@ async def lifespan(app: FastAPI):
     yield
     scheduler.shutdown()
     logger.info("APScheduler shut down.")
-
 
 # ---------------------------------------------------------------------------
 # FastAPI App
@@ -113,13 +119,12 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],          # tighten in prod
+    allow_origins=["*"],
     allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-import traceback
 @app.middleware("http")
 async def catch_exceptions_middleware(request: Request, call_next):
     try:
@@ -127,12 +132,10 @@ async def catch_exceptions_middleware(request: Request, call_next):
     except Exception as e:
         logger.error(f"Global catch: {e}")
         logger.error(traceback.format_exc())
-        from fastapi.responses import JSONResponse
         return JSONResponse(
             status_code=500,
             content={"detail": str(e), "traceback": traceback.format_exc()}
         )
-
 
 # ---------------------------------------------------------------------------
 # Request / Response models
@@ -152,16 +155,13 @@ class PipelineStartResponse(BaseModel):
     display_id: str
     status: str
 
-
-class ApproveJobRequest(BaseModel):
+class ApproveRequest(BaseModel):
     channel_variants: Optional[dict] = None
-
 
 class PublerWebhookPayload(BaseModel):
     job_id: Optional[str] = None
     published_urls: Optional[dict] = None
     status: Optional[str] = None
-
 
 # ---------------------------------------------------------------------------
 # Pipeline runner (executed in background)
@@ -172,7 +172,7 @@ def run_pipeline(state: dict):
         logger.info(f"[Pipeline] Starting for job {state['job_id']}")
         workflow = create_workflow()
         result = workflow.invoke(state)
-        logger.info(f"[Pipeline] Completed for job {state['job_id']} → approval_status={result.get('approval_status')}")
+        logger.info(f"[Pipeline] Completed for job {state['job_id']} \u2192 approval_status={result.get('approval_status')}")
     except Exception as e:
         logger.error(f"[Pipeline] Failed for job {state.get('job_id', '?')}: {e}")
         try:
@@ -187,14 +187,12 @@ def run_pipeline(state: dict):
         except:
             pass
 
-
 # ---------------------------------------------------------------------------
 # Routes
 # ---------------------------------------------------------------------------
 @app.get("/health")
 async def health():
     return {"status": "ok", "service": "atlasops-backend", "ts": datetime.utcnow().isoformat()}
-
 
 @app.post("/api/upload")
 async def upload_file(file: UploadFile = File(...)):
@@ -205,13 +203,9 @@ async def upload_file(file: UploadFile = File(...)):
         ext = file.filename.split(".")[-1] if "." in file.filename else "png"
         storage_path = f"uploads/{uuid.uuid4()}.{ext}"
         
-        logger.info(f"[Upload] Bucket: mission-assets, File: {file.filename}, Type: {file.content_type}")
-        
-        # Check if bucket exists
         try:
             supabase.storage.get_bucket("mission-assets")
         except:
-            logger.info("[Upload] Creating missing bucket: mission-assets")
             supabase.storage.create_bucket("mission-assets", options={"public": True})
 
         res = supabase.storage.from_("mission-assets").upload(
@@ -220,34 +214,21 @@ async def upload_file(file: UploadFile = File(...)):
             file_options={"content-type": file.content_type or "image/png"}
         )
         
-        if hasattr(res, 'error') and res.error:
-            logger.error(f"[Upload] Supabase Error: {res.error}")
-            return {"error": str(res.error)}
-
         public_url = supabase.storage.from_("mission-assets").get_public_url(storage_path)
-        logger.info(f"[Upload] File uploaded successfully: {public_url}")
         return {"url": public_url, "path": storage_path}
     except Exception as e:
         logger.error(f"[Upload] Critical failure: {e}")
-        logger.error(traceback.format_exc())
         return {"error": str(e)}
-
 
 @app.post("/api/pipeline/start", response_model=PipelineStartResponse)
 async def start_pipeline(req: PipelineStartRequest, background_tasks: BackgroundTasks):
     try:
-        logger.info(f"Pipeline Start Request: {req.topic}")
         supabase = get_supabase_client()
-
-        # Generate IDs
         job_id = str(uuid.uuid4())
-
-        # Count existing jobs in org to generate display_id
         existing = supabase.table("jobs").select("id", count="exact").eq("organization_id", req.organization_id).execute()
         seq = (existing.count or 0) + 1
         display_id = f"JOB-{seq:03d}"
 
-        # Insert job row
         supabase.table("jobs").insert({
             "id": job_id,
             "organization_id": req.organization_id,
@@ -260,7 +241,6 @@ async def start_pipeline(req: PipelineStartRequest, background_tasks: Background
             "compliance_issues": 0,
         }).execute()
 
-        # Insert initial audit log
         supabase.table("audit_logs").insert({
             "organization_id": req.organization_id,
             "job_id": job_id,
@@ -271,7 +251,6 @@ async def start_pipeline(req: PipelineStartRequest, background_tasks: Background
             "status": "success",
         }).execute()
 
-        # Build initial graph state
         initial_state = {
             "job_id": job_id,
             "org_id": req.organization_id,
@@ -291,26 +270,18 @@ async def start_pipeline(req: PipelineStartRequest, background_tasks: Background
             "audit_log": [],
         }
 
-        # Fire-and-forget: run the full pipeline in background
         background_tasks.add_task(run_pipeline, initial_state)
-
         return PipelineStartResponse(job_id=job_id, display_id=display_id, status="Drafting")
-
     except Exception as e:
         logger.error(f"Startup Failure: {e}")
-        logger.error(traceback.format_exc())
-        from fastapi import HTTPException
         raise HTTPException(status_code=500, detail=str(e))
-
 
 @app.post("/webhook/publer")
 async def publer_webhook(payload: PublerWebhookPayload):
-    """Receive Publer's callback after social posts are published."""
     if not payload.job_id:
         return {"received": True, "warning": "No job_id in payload"}
 
     supabase = get_supabase_client()
-
     update = {}
     if payload.published_urls:
         update["metadata"] = {"published_urls": payload.published_urls}
@@ -328,70 +299,123 @@ async def publer_webhook(payload: PublerWebhookPayload):
         "status": "success",
         "metadata": payload.model_dump(),
     }).execute()
-
-    logger.info(f"[Webhook/Publer] Processed callback for job {payload.job_id}")
     return {"received": True}
 
+@app.post("/api/extract-pdf")
+async def extract_pdf_text(file: UploadFile = File(...)):
+    try:
+        import pdfplumber
+        file_bytes = await file.read()
+        text = ""
+        with pdfplumber.open(io.BytesIO(file_bytes)) as pdf:
+            for page in pdf.pages:
+                page_text = page.extract_text()
+                if page_text:
+                    text += page_text + "\n"
+        extracted = text.strip()
+        if not extracted:
+            return {"text": "", "warning": "No text could be extracted from this PDF."}
+        return {"text": extracted}
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Failed to extract PDF text: {str(e)}")
 
 @app.post("/api/jobs/{job_id}/approve")
-async def approve_job(job_id: str, background_tasks: BackgroundTasks, req: Optional[ApproveJobRequest] = None):
-    """Manual approval endpoint — sets status to Publishing and triggers the
-    publishing node via the scheduler (or immediately)."""
+async def approve_job(job_id: str, background_tasks: BackgroundTasks, req: Optional[ApproveRequest] = None):
     supabase = get_supabase_client()
-
-    # Fetch job first to get organization_id
-    job = supabase.table("jobs").select("*").eq("id", job_id).single().execute()
+    job_res = supabase.table("jobs").select("*").eq("id", job_id).single().execute()
+    if not job_res.data:
+        return {"error": "Job not found"}
     
+    job_data = job_res.data
     supabase.table("jobs").update({"status": "Publishing", "progress": 90}).eq("id", job_id).execute()
 
-    if job.data:
-        supabase.table("audit_logs").insert({
+    supabase.table("audit_logs").insert({
+        "job_id": job_id,
+        "organization_id": job_data["organization_id"],
+        "job_display_id": job_data.get("display_id"),
+        "action": "GATE_PASSED",
+        "actor": "HUMAN_APPROVER",
+        "status": "success",
+    }).execute()
+
+    content = (
+        supabase.table("job_content")
+        .select("body")
+        .eq("job_id", job_id)
+        .order("version", desc=True)
+        .limit(1)
+        .execute()
+    )
+
+    if req and req.channel_variants:
+        supabase.table("agent_logs").insert({
             "job_id": job_id,
-            "organization_id": job.data["organization_id"],
-            "action": "GATE_PASSED",
-            "actor": "HUMAN_APPROVER",
-            "status": "success",
+            "organization_id": job_data["organization_id"],
+            "agent_name": "Gatekeeper",
+            "message": "Human operator revised and authorized variants. Sending to Edge.",
+            "severity": "info",
         }).execute()
-
-    # Also immediately trigger publishing in background
-    if job.data:
-        content = (
-            supabase.table("job_content")
-            .select("body")
-            .eq("job_id", job_id)
-            .order("version", desc=True)
-            .limit(1)
-            .execute()
-        )
-        state = {
-            "job_id": job_id,
-            "org_id": job.data["organization_id"],
-            "topic": job.data.get("topic", ""),
-            "objective": job.data.get("objective", ""),
-            "audience": job.data.get("audience", ""),
-            "channels": job.data.get("channels", []),
-            "target_languages": job.data.get("languages", ["EN"]),
-            "spec_text": "",
-            "draft_text": content.data[0]["body"] if content.data else "",
-            "image_url": "",
-            "channel_variants": req.channel_variants if req and req.channel_variants else {},
-            "compliance_result": {},
-            "compliance_retries": 0,
-            "approval_status": "approved",
-            "audit_log": [],
-        }
         
-        # Save the edited variants so the frontend UI correctly displays the final versions
-        if req and req.channel_variants:
-            supabase.table("agent_logs").insert({
-                "job_id": job_id,
-                "organization_id": job.data["organization_id"],
-                "agent_name": "Gatekeeper",
-                "message": "Human operator revised and authorized variants. Sending to Edge.",
-                "severity": "info",
-                "metadata": {"variants": req.channel_variants}
-            }).execute()
-            
-        background_tasks.add_task(publishing_node, state)
+        supabase.table("jobs").update({
+            "output_content": req.channel_variants
+        }).eq("id", job_id).execute()
 
+    state = {
+        "job_id": job_id,
+        "org_id": job_data["organization_id"],
+        "topic": job_data.get("topic", ""),
+        "objective": job_data.get("objective", ""),
+        "audience": job_data.get("audience", ""),
+        "channels": job_data.get("channels", []),
+        "target_languages": job_data.get("languages", ["EN"]),
+        "spec_text": "",
+        "draft_text": content.data[0]["body"] if content.data else "",
+        "image_url": job_data.get("image_url", ""),
+        "channel_variants": req.channel_variants if req and req.channel_variants else (job_data.get("output_content") or {}),
+        "compliance_result": {},
+        "compliance_retries": 0,
+        "localized_variants": {},
+        "approval_status": "approved",
+        "audit_log": [],
+    }
+    
+    background_tasks.add_task(publishing_node, state)
     return {"job_id": job_id, "status": "Publishing"}
+
+@app.get("/api/compliance/policies")
+async def list_policies():
+    supabase = get_supabase_client()
+    res = supabase.table("compliance_policies").select("*").execute()
+    return res.data
+
+@app.post("/api/compliance/policies")
+async def create_policy(req: PolicyRequest):
+    supabase = get_supabase_client()
+    res = supabase.table("compliance_policies").insert({
+        "organization_id": req.organization_id,
+        "name": req.name,
+        "schema_json": req.schema_json,
+        "is_active": req.is_active
+    }).execute()
+    return res.data
+
+@app.get("/api/compliance/terms")
+async def list_blocked_terms():
+    supabase = get_supabase_client()
+    res = supabase.table("blocked_terms").select("*").execute()
+    return res.data
+
+@app.post("/api/compliance/terms")
+async def add_blocked_term(req: TermRequest):
+    supabase = get_supabase_client()
+    res = supabase.table("blocked_terms").insert({
+        "policy_id": req.policy_id,
+        "term": req.term
+    }).execute()
+    return res.data
+
+@app.delete("/api/compliance/terms/{term_id}")
+async def delete_blocked_term(term_id: str):
+    supabase = get_supabase_client()
+    res = supabase.table("blocked_terms").delete().eq("id", term_id).execute()
+    return {"status": "deleted", "id": term_id}
