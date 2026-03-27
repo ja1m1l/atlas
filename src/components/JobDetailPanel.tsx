@@ -8,13 +8,22 @@ import { X, Terminal, Box, PlaySquare, AlertCircle } from 'lucide-react';
 export function JobDetailPanel({ job, onClose }: { job: Job | null; onClose: () => void }) {
   const [activeTab, setActiveTab] = useState('Overview');
   const [isApproving, setIsApproving] = useState(false);
+  const [editedContent, setEditedContent] = useState<Record<string, string>>(job?.outputContent || {});
+
+  React.useEffect(() => {
+    if (job?.outputContent) {
+      setEditedContent(job.outputContent);
+    }
+  }, [job]);
 
   const handleApprove = async () => {
     if (!job || isApproving) return;
     setIsApproving(true);
     try {
-      const resp = await fetch(`http://localhost:8080/api/jobs/${job.id}/approve`, {
-        method: 'POST'
+      const resp = await fetch(`http://localhost:8000/api/jobs/${job.id}/approve`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ channel_variants: editedContent })
       });
       if (!resp.ok) throw new Error('API Rejection');
     } catch (err) {
@@ -115,10 +124,18 @@ export function JobDetailPanel({ job, onClose }: { job: Job | null; onClose: () 
              )}
                           {activeTab === 'Channels' && (
                 <div className="space-y-4">
-                  {job.outputContent ? Object.entries(job.outputContent).map(([platform, content]) => (
+                  {job.outputContent ? Object.entries(editedContent).map(([platform, content]) => (
                     <div key={platform} className="bg-white dark:bg-[#141417] border border-slate-200 dark:border-[#27272a]/60 rounded-xl p-4 ring-1 ring-inset ring-transparent dark:ring-white/5 shadow-sm">
                       <h4 className="text-[10px] font-mono text-indigo-600 dark:text-zinc-500 mb-2 uppercase tracking-widest font-bold">{platform}</h4>
-                      <p className="text-[12px] text-slate-600 dark:text-zinc-300 font-sans leading-relaxed">{content}</p>
+                      {job.status === 'Pending' ? (
+                        <textarea 
+                          value={content}
+                          onChange={(e) => setEditedContent(prev => ({...prev, [platform]: e.target.value}))}
+                          className="w-full h-32 bg-slate-50 dark:bg-[#18181b]/50 text-[12px] text-slate-800 dark:text-zinc-200 rounded-lg p-3 border border-slate-200 dark:border-[#27272a]/80 focus:outline-none focus:border-indigo-400 dark:focus:border-zinc-500 resize-y"
+                        />
+                      ) : (
+                        <p className="text-[12px] text-slate-600 dark:text-zinc-300 font-sans leading-relaxed whitespace-pre-wrap">{content}</p>
+                      )}
                     </div>
                   )) : (
                     <div className="flex items-center justify-center h-48 text-slate-400 dark:text-zinc-600 font-mono text-[10px] uppercase tracking-widest">Awaiting dispatch variants...</div>

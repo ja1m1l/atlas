@@ -29,9 +29,9 @@ def approval_node(state: ContentOpsState) -> ContentOpsState:
                 "html": html_content
             })
             
-        state["approval_status"] = "approved"
+        state["approval_status"] = "pending"
         
-        supabase.table("jobs").update({"status": "Publishing", "progress": 85}).eq("id", state["job_id"]).execute()
+        supabase.table("jobs").update({"status": "Pending", "progress": 80}).eq("id", state["job_id"]).execute()
         
         supabase.table("agent_logs").insert({
             "job_id": state["job_id"],

@@ -83,7 +83,8 @@ def drafting_node(state: ContentOpsState) -> ContentOpsState:
         "organization_id": state["org_id"],
         "agent_name": "Drafting Protocol",
         "message": "Drafting complete. Content payload constructed.",
-        "severity": "info"
+        "severity": "info",
+        "metadata": {"variants": state["channel_variants"]}
     }).execute()
 
     supabase.table("audit_logs").insert({

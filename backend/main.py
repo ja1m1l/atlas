@@ -114,7 +114,7 @@ app = FastAPI(
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],          # tighten in prod
-    allow_credentials=True,
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -151,6 +151,10 @@ class PipelineStartResponse(BaseModel):
     job_id: str
     display_id: str
     status: str
+
+
+class ApproveJobRequest(BaseModel):
+    channel_variants: Optional[dict] = None
 
 
 class PublerWebhookPayload(BaseModel):
@@ -330,22 +334,26 @@ async def publer_webhook(payload: PublerWebhookPayload):
 
 
 @app.post("/api/jobs/{job_id}/approve")
-async def approve_job(job_id: str, background_tasks: BackgroundTasks):
+async def approve_job(job_id: str, background_tasks: BackgroundTasks, req: Optional[ApproveJobRequest] = None):
     """Manual approval endpoint — sets status to Publishing and triggers the
     publishing node via the scheduler (or immediately)."""
     supabase = get_supabase_client()
 
+    # Fetch job first to get organization_id
+    job = supabase.table("jobs").select("*").eq("id", job_id).single().execute()
+    
     supabase.table("jobs").update({"status": "Publishing", "progress": 90}).eq("id", job_id).execute()
 
-    supabase.table("audit_logs").insert({
-        "job_id": job_id,
-        "action": "GATE_PASSED",
-        "actor": "HUMAN_APPROVER",
-        "status": "success",
-    }).execute()
+    if job.data:
+        supabase.table("audit_logs").insert({
+            "job_id": job_id,
+            "organization_id": job.data["organization_id"],
+            "action": "GATE_PASSED",
+            "actor": "HUMAN_APPROVER",
+            "status": "success",
+        }).execute()
 
     # Also immediately trigger publishing in background
-    job = supabase.table("jobs").select("*").eq("id", job_id).single().execute()
     if job.data:
         content = (
             supabase.table("job_content")
@@ -366,13 +374,24 @@ async def approve_job(job_id: str, background_tasks: BackgroundTasks):
             "spec_text": "",
             "draft_text": content.data[0]["body"] if content.data else "",
             "image_url": "",
-            "channel_variants": {},
+            "channel_variants": req.channel_variants if req and req.channel_variants else {},
             "compliance_result": {},
             "compliance_retries": 0,
-            "localized_variants": {},
             "approval_status": "approved",
             "audit_log": [],
         }
+        
+        # Save the edited variants so the frontend UI correctly displays the final versions
+        if req and req.channel_variants:
+            supabase.table("agent_logs").insert({
+                "job_id": job_id,
+                "organization_id": job.data["organization_id"],
+                "agent_name": "Gatekeeper",
+                "message": "Human operator revised and authorized variants. Sending to Edge.",
+                "severity": "info",
+                "metadata": {"variants": req.channel_variants}
+            }).execute()
+            
         background_tasks.add_task(publishing_node, state)
 
     return {"job_id": job_id, "status": "Publishing"}

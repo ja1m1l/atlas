@@ -31,7 +31,7 @@ type JobAction =
   | { type: 'SET_JOBS'; payload: Job[] }
   | { type: 'UPSERT_JOB'; payload: Job }
   | { type: 'SET_ACTIVE_TAB'; payload: string }
-  | { type: 'ADD_LOG'; payload: { id: string; log: { agent: string, message: string, time: string } } }
+  | { type: 'ADD_LOG'; payload: { id: string; metadata?: any; log: { agent: string, message: string, time: string } } }
   | { type: 'SET_LOADING'; payload: boolean };
 
 const initialState: JobState = {
@@ -58,19 +58,22 @@ const jobReducer = (state: JobState, action: JobAction): JobState => {
     }
     case 'SET_ACTIVE_TAB':
       return { ...state, activeTab: action.payload };
-    case 'ADD_LOG':
+    case 'ADD_LOG': {
+      const variants = action.payload.metadata?.variants;
       return {
         ...state,
         jobs: state.jobs.map(job =>
           job.id === action.payload.id
             ? { 
                 ...job, 
+                ...(variants ? { outputContent: variants } : {}),
                 agentLogs: [...(job.agentLogs || []).filter(l => l.time !== action.payload.log.time || l.message !== action.payload.log.message), action.payload.log]
                   .sort((a, b) => new Date(a.time).getTime() - new Date(b.time).getTime())
               }
             : job
         ),
       };
+    }
     case 'SET_LOADING':
       return { ...state, loading: action.payload };
     default:
@@ -103,23 +106,25 @@ export const JobProvider = ({ children }: { children: ReactNode }) => {
         .select('*')
         .order('created_at', { ascending: true });
 
-      const jobsWithLogs: Job[] = (jobsData || []).map(j => ({
-        id: j.id,
-        display_id: j.display_id,
-        topic: j.topic,
-        audience: j.audience,
-        languages: j.languages,
-        status: j.status as JobStatus,
-        progress: j.progress,
-        complianceIssues: j.compliance_issues,
-        createdAt: j.created_at,
-        outputContent: j.output_content,
-        imageUrl: j.image_url,
-        publishedChannels: j.published_channels,
-        agentLogs: (logsData || [])
-          .filter(l => l.job_id === j.id)
-          .map(l => ({ agent: l.agent_name, message: l.message, time: l.created_at }))
-      }));
+      const jobsWithLogs: Job[] = (jobsData || []).map(j => {
+        const jLogs = (logsData || []).filter((l: any) => l.job_id === j.id);
+        const lVar = jLogs.slice().reverse().find((l: any) => l.metadata && l.metadata.variants);
+        return {
+          id: j.id,
+          display_id: j.display_id,
+          topic: j.topic,
+          audience: j.audience,
+          languages: j.languages,
+          status: j.status as JobStatus,
+          progress: j.progress,
+          complianceIssues: j.compliance_issues,
+          createdAt: j.created_at,
+          outputContent: lVar ? lVar.metadata.variants : undefined,
+          imageUrl: j.image_url,
+          publishedChannels: j.published_channels,
+          agentLogs: jLogs.map((l: any) => ({ agent: l.agent_name, message: l.message, time: l.created_at }))
+        };
+      });
 
       dispatch({ type: 'SET_JOBS', payload: jobsWithLogs });
     };
@@ -144,7 +149,6 @@ export const JobProvider = ({ children }: { children: ReactNode }) => {
               progress: newJob.progress,
               complianceIssues: newJob.compliance_issues,
               createdAt: newJob.created_at,
-              outputContent: newJob.output_content,
               imageUrl: newJob.image_url,
               publishedChannels: newJob.published_channels,
             }
@@ -162,6 +166,7 @@ export const JobProvider = ({ children }: { children: ReactNode }) => {
             type: 'ADD_LOG',
             payload: {
               id: newLog.job_id,
+              metadata: newLog.metadata,
               log: { agent: newLog.agent_name, message: newLog.message, time: newLog.created_at }
             }
           });
