@@ -31,13 +31,13 @@ export function AuditTrail() {
         console.error('Audit fetch fault:', error);
       } else {
         setLogs((data || []).map(l => ({
-          id: l.job_id,
-          display_id: l.job_display_id,
-          topic: l.topic || 'System Maintenance',
-          action: l.action,
-          actor: l.actor,
-          time: l.created_at,
-          status: l.status
+          id: l.job_id || '',
+          display_id: l.job_display_id || '',
+          topic: String(l.topic || 'System Maintenance'),
+          action: String(l.action || 'System Action'),
+          actor: String(l.actor || 'System Router'),
+          time: l.created_at || new Date().toISOString(),
+          status: String(l.status || 'success')
         })));
       }
       setLoading(false);
@@ -51,13 +51,13 @@ export function AuditTrail() {
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'audit_logs' }, payload => {
         const l = payload.new as any;
         setLogs(prev => [{
-          id: l.job_id,
-          display_id: l.job_display_id,
-          topic: l.topic || 'System Maintenance',
-          action: l.action,
-          actor: l.actor,
-          time: l.created_at,
-          status: l.status
+          id: l.job_id || '',
+          display_id: l.job_display_id || '',
+          topic: String(l.topic || 'System Maintenance'),
+          action: String(l.action || 'System Action'),
+          actor: String(l.actor || 'System Router'),
+          time: l.created_at || new Date().toISOString(),
+          status: String(l.status || 'success')
         }, ...prev]);
       })
       .subscribe();
@@ -67,11 +67,15 @@ export function AuditTrail() {
     };
   }, []);
 
-  const filteredLogs = logs.filter(log => 
-    log.topic.toLowerCase().includes(searchTerm.toLowerCase()) || 
-    log.action.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    log.id?.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const safeSearch = (searchTerm || '').toLowerCase();
+  const filteredLogs = logs.filter(log => {
+    const s_topic = (log.topic || '').toLowerCase();
+    const s_action = (log.action || '').toLowerCase();
+    const s_id = (log.id || '').toLowerCase();
+    return s_topic.includes(safeSearch) || 
+           s_action.includes(safeSearch) ||
+           s_id.includes(safeSearch);
+  });
 
   return (
     <div className="p-8 h-full flex flex-col gap-6 w-full max-w-[1400px] mx-auto overflow-hidden">
