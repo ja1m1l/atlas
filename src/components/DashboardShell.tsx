@@ -2,12 +2,14 @@
 
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
-import { Sun, Moon, User, Plus } from 'lucide-react';
-import { motion } from 'framer-motion';
+import { usePathname, useRouter } from 'next/navigation';
+import { Sun, Moon, User, Plus, LogOut, Settings } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { GlobeLogo } from './GlobeLogo';
 import { NewJobModal } from './NewJobModal';
 import Aurora from './Aurora';
+import { useAuth } from '../store/AuthContext';
+import { AtlasLoader } from './AtlasLoader';
 
 const TABS = [
   { id: 'PIPELINE', label: 'PIPELINE', href: '/pipeline' },
@@ -19,8 +21,11 @@ const TABS = [
 
 export function DashboardShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
+  const router = useRouter();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isDarkMode, setIsDarkMode] = useState(true);
+  const [isProfileOpen, setIsProfileOpen] = useState(false);
+  const { user, loading, signOut } = useAuth();
 
   useEffect(() => {
     if (isDarkMode) {
@@ -31,6 +36,16 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
   }, [isDarkMode]);
 
   const activeTab = TABS.find(tab => pathname.startsWith(tab.href))?.id || 'PIPELINE';
+
+  useEffect(() => {
+    if (!loading && !user) {
+      router.push('/login');
+    }
+  }, [user, loading, router]);
+
+  if (loading || !user) {
+    return <AtlasLoader />;
+  }
 
   return (
     <div className={`min-h-screen transition-colors duration-300 font-sans overflow-hidden flex flex-col items-center p-2 sm:p-6 relative ${isDarkMode ? 'text-[#e4e4e7]' : 'text-slate-900'}`}>
@@ -156,9 +171,74 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
             >
               {isDarkMode ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
             </button>
-            <button className="w-8 h-8 rounded-full bg-slate-100 dark:bg-zinc-800 border border-slate-200 dark:border-white/10 flex items-center justify-center text-slate-500 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-white transition-colors shadow-sm ml-2 overflow-hidden">
-              <User className="w-4 h-4" />
-            </button>
+            <div className="relative ml-2">
+              <button 
+                onClick={() => setIsProfileOpen(!isProfileOpen)}
+                title="Profile"
+                className={`w-8 h-8 rounded-full border flex items-center justify-center transition-colors shadow-sm overflow-hidden ${
+                  isProfileOpen 
+                    ? 'bg-indigo-50 border-indigo-200 text-indigo-600 dark:bg-indigo-500/20 dark:border-indigo-500/30 dark:text-indigo-400' 
+                    : 'bg-slate-100 dark:bg-zinc-800 border-slate-200 dark:border-white/10 text-slate-500 dark:text-zinc-400 hover:bg-slate-200 dark:hover:bg-zinc-700'
+                }`}
+              >
+                <User className="w-4 h-4" />
+              </button>
+
+              <AnimatePresence>
+                {isProfileOpen && (
+                  <motion.div
+                    initial={{ opacity: 0, scale: 0.95, y: 10 }}
+                    animate={{ opacity: 1, scale: 1, y: 0 }}
+                    exit={{ opacity: 0, scale: 0.95, y: 10 }}
+                    transition={{ duration: 0.15, ease: 'easeOut' }}
+                    className="absolute right-0 mt-3 w-56 rounded-xl bg-white dark:bg-[#0c0c0e] border border-slate-200 dark:border-white/10 shadow-xl overflow-hidden z-50 origin-top-right"
+                  >
+                    <div className="px-4 py-3 border-b border-slate-100 dark:border-white/5">
+                      <p className="text-sm font-semibold text-slate-800 dark:text-zinc-200 truncate">
+                        {user.email}
+                      </p>
+                      <p className="text-xs text-slate-500 dark:text-zinc-500 truncate mt-0.5">
+                        Commander
+                      </p>
+                    </div>
+                    
+                    <div className="p-1.5">
+                      <button 
+                        onClick={() => {
+                          setIsProfileOpen(false);
+                          // Optional: Add settings navigation later
+                        }}
+                        className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-slate-600 dark:text-zinc-400 hover:bg-slate-100 dark:hover:bg-white/5 hover:text-slate-900 dark:hover:text-zinc-200 rounded-lg transition-colors text-left font-medium"
+                      >
+                        <Settings className="w-4 h-4" />
+                        Settings
+                      </button>
+                    </div>
+
+                    <div className="p-1.5 border-t border-slate-100 dark:border-white/5 bg-slate-50 dark:bg-white/[0.02]">
+                      <button 
+                        onClick={async () => {
+                          setIsProfileOpen(false);
+                          await signOut();
+                        }}
+                        className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-500/10 rounded-lg transition-colors text-left font-medium"
+                      >
+                        <LogOut className="w-4 h-4" />
+                        Sign Out
+                      </button>
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+              
+              {/* Click away dismiss layer */}
+              {isProfileOpen && (
+                <div 
+                  className="fixed inset-0 z-40" 
+                  onClick={() => setIsProfileOpen(false)} 
+                />
+              )}
+            </div>
           </div>
         </div>
       </header>

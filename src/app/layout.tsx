@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Space_Grotesk, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
 import { JobProvider } from "../store/JobContext";
+import { AuthProvider } from "../store/AuthContext";
 
 const spaceGrotesk = Space_Grotesk({
   variable: "--font-space-grotesk",
@@ -29,9 +30,11 @@ export default function RootLayout({
       className={`${spaceGrotesk.variable} ${jetBrainsMono.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col font-sans transition-colors duration-300 text-slate-900 bg-slate-100 dark:text-gray-100 dark:bg-[#050505]">
-        <JobProvider>
-          {children}
-        </JobProvider>
+          <AuthProvider>
+            <JobProvider>
+              {children}
+            </JobProvider>
+          </AuthProvider>
       </body>
     </html>
   );

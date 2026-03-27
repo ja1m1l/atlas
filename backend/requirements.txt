@@ -9,3 +9,4 @@ python-dotenv
 apscheduler
 resend
 requests
+python-multipart
