@@ -12,11 +12,28 @@ export function JobDetailPanel({ job, onClose }: { job: Job | null; onClose: () 
 
   // Editable content state — initialized from job.outputContent
   const [editedContent, setEditedContent] = useState<Record<string, string>>({});
+  const [selectedL10nLang, setSelectedL10nLang] = useState('en');
+  const [localVariants, setLocalVariants] = useState<Record<string, any>>({});
 
   // Synchronize editedContent when job or its outputContent changes
   useEffect(() => {
     if (job?.outputContent) {
       setEditedContent({ ...job.outputContent });
+    }
+    
+    if (job) {
+      const variants: Record<string, any> = {
+        en: { 
+          blog: job.metadata?.draft_text || '', 
+          ...(job.outputContent || {}) 
+        }
+      };
+      if (job.localized_variants) {
+        Object.entries(job.localized_variants).forEach(([lang, content]) => {
+          variants[lang] = { ...content };
+        });
+      }
+      setLocalVariants(variants);
     }
   }, [job]);
 
@@ -261,34 +278,55 @@ export function JobDetailPanel({ job, onClose }: { job: Job | null; onClose: () 
 
             {activeTab === 'Localization' && (
               <div className="space-y-6">
-                <div className="grid grid-cols-1 gap-4">
-                  {LANG_DATA.filter(l => selectedLangs.includes(l.code)).map(lang => {
+                {/* Language Toggle */}
+                <div className="flex bg-slate-100 dark:bg-[#141417] p-1 rounded-xl border border-slate-200 dark:border-[#27272a]/60">
+                  {LANG_DATA.filter(l => selectedLangs.includes(l.code)).map((lang) => (
+                    <button
+                      key={lang.code}
+                      onClick={() => setSelectedL10nLang(lang.code)}
+                      className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-lg text-[11px] font-mono font-bold transition-all
+                        ${selectedL10nLang === lang.code 
+                          ? 'bg-white dark:bg-[#27272a] text-indigo-700 dark:text-zinc-200 shadow-sm border border-slate-200 dark:border-zinc-600/50' 
+                          : 'text-slate-500 dark:text-zinc-500 hover:text-slate-700 dark:hover:text-zinc-400'}`}
+                    >
+                      <span>{lang.flag}</span>
+                      <span className="uppercase">{lang.label}</span>
+                    </button>
+                  ))}
+                </div>
+
+                <div className="space-y-6">
+                  {(() => {
+                    const lang = LANG_DATA.find(l => l.code === selectedL10nLang) || LANG_DATA[0];
                     const isEN = lang.code === 'en';
-                    const content = isEN
-                      ? { 
-                          blog: job.metadata?.draft_text || 'Draft content will appear here...', 
-                          linkedin: job.outputContent?.linkedin || 'Waiting for LinkedIn variant...', 
-                          twitter: job.outputContent?.twitter || 'Waiting for Twitter variant...' 
-                        }
-                      : job.localized_variants?.[lang.code];
+                    const content = localVariants[lang.code] || (isEN ? job.outputContent : job.localized_variants?.[lang.code]);
 
                     const error = content?.error;
-                    const tweetCount = content?.twitter?.length || 0;
+                    
+                    // Filter platforms to only show what was actually generated/requested
+                    const platforms = Object.keys(content || {})
+                      .filter(k => k !== 'blog' && k !== 'email_subject' && k !== 'error');
 
                     return (
                       <div key={lang.code} className="bg-white dark:bg-[#141417] rounded-2xl border border-slate-200 dark:border-[#27272a]/60 p-6 shadow-sm ring-1 ring-inset ring-transparent dark:ring-white/5">
-                        <div className="flex items-center justify-between mb-4 pb-3 border-b border-slate-100 dark:border-white/5">
+                        <div className="flex items-center justify-between mb-6 pb-3 border-b border-slate-100 dark:border-white/5">
                           <div className="flex items-center gap-3">
                             <span className="text-xl leading-none">{lang.flag}</span>
                             <h4 className="text-[12px] font-bold text-slate-900 dark:text-white uppercase tracking-widest">{lang.label} Version</h4>
                           </div>
-                          {isEN && <span className="text-[9px] font-mono text-indigo-500 dark:text-zinc-500 bg-indigo-50 dark:bg-indigo-500/10 px-2 py-0.5 rounded border border-indigo-100 dark:border-indigo-500/20 font-bold uppercase">Source Material</span>}
-                          {!isEN && !content && !error && (
-                            <div className="flex items-center gap-2">
-                              <RefreshCcw className="w-3 h-3 text-indigo-500 animate-spin" />
-                              <span className="text-[9px] font-mono text-indigo-500 uppercase font-bold">Translating...</span>
-                            </div>
-                          )}
+                          <button 
+                            onClick={() => {
+                              if (content) {
+                                // Extract only the channel variants (exclude blog, etc.)
+                                const { blog, ...channelVariants } = content;
+                                setEditedContent({ ...channelVariants });
+                                setActiveTab('Channels');
+                              }
+                            }}
+                            className="text-[9px] font-mono text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-500/10 px-3 py-1 rounded-lg border border-indigo-200 dark:border-indigo-500/20 font-bold uppercase hover:bg-indigo-100 dark:hover:bg-indigo-500/20 transition-all active:scale-95"
+                          >
+                            Set as Final Content
+                          </button>
                         </div>
 
                         {error ? (
@@ -300,12 +338,12 @@ export function JobDetailPanel({ job, onClose }: { job: Job | null; onClose: () 
                             </div>
                           </div>
                         ) : !isEN && !content ? (
-                          <div className="animate-pulse space-y-4 py-2">
-                            <div className="h-20 bg-slate-100 dark:bg-white/5 rounded-xl w-full"></div>
-                            <div className="h-12 bg-slate-100 dark:bg-white/5 rounded-xl w-full"></div>
+                          <div className="flex flex-col items-center justify-center py-12 opacity-40">
+                             <RefreshCcw className="w-8 h-8 text-indigo-500 animate-spin mb-4" />
+                             <p className="font-mono text-[10px] uppercase tracking-widest">Translating to {lang.label}...</p>
                           </div>
                         ) : (
-                          <div className="space-y-5">
+                          <div className="space-y-6">
                             <div className="space-y-2">
                               <label className="text-[10px] font-mono text-slate-500 dark:text-zinc-500 uppercase tracking-widest font-bold">Blog / Long-form Draft</label>
                               <div className="bg-slate-50 dark:bg-[#0c0c0e] p-4 rounded-xl border border-slate-200 dark:border-[#27272a]/60 text-[13px] text-slate-700 dark:text-zinc-300 leading-relaxed font-sans max-h-[160px] overflow-y-auto custom-scrollbar whitespace-pre-wrap">
@@ -313,30 +351,44 @@ export function JobDetailPanel({ job, onClose }: { job: Job | null; onClose: () 
                               </div>
                             </div>
 
-                            <div className="grid grid-cols-2 gap-4">
-                              <div className="space-y-2">
-                                <label className="text-[10px] font-mono text-slate-500 dark:text-zinc-500 uppercase tracking-widest font-bold">LinkedIn Variant</label>
-                                <div className="bg-slate-50 dark:bg-[#0c0c0e] p-4 rounded-xl border border-slate-200 dark:border-[#27272a]/60 text-[12px] text-slate-600 dark:text-zinc-400 font-sans leading-relaxed min-h-[100px] whitespace-pre-wrap italic">
-                                  {content?.linkedin || '...'}
-                                </div>
-                              </div>
-                              <div className="space-y-2">
-                                <div className="flex justify-between items-center">
-                                  <label className="text-[10px] font-mono text-slate-500 dark:text-zinc-500 uppercase tracking-widest font-bold">Twitter Variant</label>
-                                  <span className={`text-[10px] font-mono font-bold ${tweetCount > 240 ? 'text-rose-500' : 'text-emerald-500'}`}>
-                                    {tweetCount}/240 {tweetCount <= 240 ? '✓' : '⚠'}
-                                  </span>
-                                </div>
-                                <div className="bg-slate-50 dark:bg-[#0c0c0e] p-4 rounded-xl border border-slate-200 dark:border-[#27272a]/60 text-[12px] text-slate-600 dark:text-zinc-400 font-sans leading-relaxed min-h-[100px] whitespace-pre-wrap italic">
-                                  {content?.twitter || '...'}
-                                </div>
-                              </div>
+                            <div className="grid grid-cols-1 gap-5">
+                              {platforms.map(platform => {
+                                const val = content?.[platform] || '';
+                                return (
+                                  <div key={platform} className="space-y-2">
+                                    <div className="flex justify-between items-center">
+                                      <label className="text-[10px] font-mono text-slate-500 dark:text-zinc-500 uppercase tracking-widest font-bold">
+                                        {PLATFORM_LABELS[platform] || platform} variant
+                                      </label>
+                                      {platform === 'twitter' && (
+                                        <span className={`text-[10px] font-mono font-bold ${val.length > 240 ? 'text-rose-500' : 'text-emerald-500'}`}>
+                                          {val.length}/240 {val.length <= 240 ? '✓' : '⚠'}
+                                        </span>
+                                      )}
+                                    </div>
+                                    <textarea
+                                      value={val}
+                                      onChange={(e) => {
+                                        const newValue = e.target.value;
+                                        setLocalVariants(prev => ({
+                                          ...prev,
+                                          [lang.code]: {
+                                            ...(prev[lang.code] || {}),
+                                            [platform]: newValue
+                                          }
+                                        }));
+                                      }}
+                                      className="w-full bg-slate-50 dark:bg-[#0c0c0e] p-4 rounded-xl border border-slate-200 dark:border-[#27272a]/60 text-[12px] text-slate-600 dark:text-zinc-400 font-sans leading-relaxed min-h-[100px] whitespace-pre-wrap focus:outline-none focus:border-indigo-400 dark:focus:border-zinc-500 transition-colors resize-y"
+                                    />
+                                  </div>
+                                );
+                              })}
                             </div>
                           </div>
                         )}
                       </div>
                     );
-                  })}
+                  })()}
                 </div>
               </div>
             )}
