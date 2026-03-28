@@ -84,14 +84,13 @@ def _publish_to_buffer_graphql(access_token: str, channel_id: str, text: str, se
     
     # Platform-specific adjustments
     if image_url:
+        print(f"[Buffer] Attaching image to {service} post: {image_url}")
         input_data["assets"] = {
             "images": [{"url": image_url}]
         }
     elif service == "instagram":
-        # Fallback for Instagram if no user image provided
-        input_data["assets"] = {
-            "images": [{"url": "https://picsum.photos/1080/1080"}]
-        }
+        # Instagram requires an image — log a warning if none provided
+        print(f"[Buffer] WARNING: No image provided for Instagram post. Instagram requires an image.")
 
     if service == "instagram":
         input_data["metadata"] = {
@@ -177,6 +176,9 @@ def publishing_node(state: ContentOpsState) -> ContentOpsState:
     failed_channels = []
     variants = state.get("channel_variants", {})
     user_image_url = state.get("image_url", "")
+    print(f"[Buffer] Image URL from pipeline state: '{user_image_url}'")
+    _log_deployment(state, f"Image URL for publishing: {user_image_url or '(none)'}")
+
 
     # ── Buffer: Social Media Publishing ──
     if buffer_token:

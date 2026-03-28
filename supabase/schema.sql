@@ -87,6 +87,7 @@ CREATE TABLE public.jobs (
   status            public.job_status NOT NULL DEFAULT 'Drafting',
   progress          INTEGER NOT NULL DEFAULT 0 CHECK (progress >= 0 AND progress <= 100),
   compliance_issues INTEGER NOT NULL DEFAULT 0,
+  image_url         TEXT DEFAULT '',                       -- Supabase Storage public URL for post image
   created_by        UUID REFERENCES public.profiles(id) ON DELETE SET NULL,
   created_at        TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at        TIMESTAMPTZ NOT NULL DEFAULT NOW()

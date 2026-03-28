@@ -13,7 +13,7 @@ interface CompliancePolicy {
   id: string;
   name: string;
   schema_json: any;
-  is_active: bool;
+  is_active: boolean;
 }
 
 export function ComplianceRules() {
@@ -36,8 +36,8 @@ export function ComplianceRules() {
     setIsLoading(true);
     try {
       const [policiesResp, termsResp] = await Promise.all([
-        fetch('http://localhost:8000/api/compliance/policies'),
-        fetch('http://localhost:8000/api/compliance/terms')
+        fetch('http://127.0.0.1:8000/api/compliance/policies'),
+        fetch('http://127.0.0.1:8000/api/compliance/terms')
       ]);
       const policiesData = await policiesResp.json();
       const termsData = await termsResp.json();
@@ -61,7 +61,7 @@ export function ComplianceRules() {
       // Auto-create policy if none exists
       if (!policyId) {
         console.log("No policy found, creating default...");
-        const pResp = await fetch('http://localhost:8000/api/compliance/policies', {
+        const pResp = await fetch('http://127.0.0.1:8000/api/compliance/policies', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -76,7 +76,7 @@ export function ComplianceRules() {
         setPolicies([newPolicy[0]]);
       }
 
-      const resp = await fetch('http://localhost:8000/api/compliance/terms', {
+      const resp = await fetch('http://127.0.0.1:8000/api/compliance/terms', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -98,7 +98,7 @@ export function ComplianceRules() {
 
   const handleDeleteTerm = async (id: string) => {
     try {
-      const resp = await fetch(`http://localhost:8000/api/compliance/terms/${id}`, {
+      const resp = await fetch(`http://127.0.0.1:8000/api/compliance/terms/${id}`, {
         method: 'DELETE'
       });
       if (resp.ok) {

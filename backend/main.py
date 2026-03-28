@@ -59,7 +59,7 @@ def poll_for_approved_jobs():
         supabase = get_supabase_client()
         jobs = (
             supabase.table("jobs")
-            .select("id, organization_id, topic, audience, languages")
+            .select("id, organization_id, topic, audience, languages, image_url")
             .eq("status", "Publishing")
             .execute()
         )
@@ -75,7 +75,7 @@ def poll_for_approved_jobs():
                 "target_languages": job.get("languages", ["EN"]),
                 "spec_text": "",
                 "draft_text": "",
-                "image_url": "",
+                "image_url": job.get("image_url", ""),
                 "channel_variants": {},
                 "compliance_result": {},
                 "compliance_retries": 0,
@@ -239,6 +239,7 @@ async def start_pipeline(req: PipelineStartRequest, background_tasks: Background
             "status": "Drafting",
             "progress": 0,
             "compliance_issues": 0,
+            "image_url": req.image_url,
         }).execute()
 
         supabase.table("audit_logs").insert({
