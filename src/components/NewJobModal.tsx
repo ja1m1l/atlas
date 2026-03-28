@@ -90,20 +90,20 @@ export function NewJobModal({ onClose }: { onClose: () => void }) {
       // For this hackathon demo, we use the default organization ID
       const organization_id = "02c4a65c-bad2-41b4-8e69-9aed1b2cca4a";
 
-      const response = await fetch('http://localhost:8000/api/pipeline/start', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          organization_id,
-          topic,
-          objective: finalObjective,
-          audience,
-          channels: selectedChannels,
-          languages: selectedLangs,
-          spec_text: "",
-          image_url: imageUrl
-        })
-      });
+        const response = await fetch('http://localhost:8000/api/pipeline/start', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            organization_id,
+            topic,
+            objective: finalObjective,
+            audience,
+            channels: selectedChannels,
+            target_languages: selectedLangs.map(l => l.toLowerCase()),
+            spec_text: "",
+            image_url: imageUrl
+          })
+        });
 
       if (!response.ok) throw new Error('Failed to start pipeline');
       onClose();
@@ -309,6 +309,61 @@ export function NewJobModal({ onClose }: { onClose: () => void }) {
                 ))}
               </div>
             </div>
+          </div>
+
+          {/* Localization Languages */}
+          <div className="flex flex-col gap-3 p-5 bg-slate-50 dark:bg-white/5 rounded-2xl border border-slate-200 dark:border-white/10 shadow-inner">
+            <div className="flex items-center justify-between">
+              <label className="text-[11px] font-mono text-slate-500 dark:text-zinc-500 uppercase tracking-widest font-semibold flex items-center gap-2">
+                <Globe2 className="w-3.5 h-3.5" /> Content Languages
+              </label>
+              <span className="text-[10px] font-mono font-bold text-indigo-600 dark:text-indigo-400">
+                Selected: {selectedLangs.join(', ')}
+              </span>
+            </div>
+            
+            <div className="flex items-center gap-4 pt-1">
+                <div className="flex items-center gap-2 group cursor-not-allowed opacity-60">
+                    <input 
+                      type="checkbox" 
+                      checked 
+                      disabled 
+                      className="w-4 h-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 bg-slate-100"
+                    />
+                    <span className="text-[13px] font-medium text-slate-700 dark:text-zinc-300">English (EN)</span>
+                </div>
+
+                <label className="flex items-center gap-2 group cursor-pointer">
+                    <input 
+                      type="checkbox" 
+                      checked={selectedLangs.includes('HI')}
+                      onChange={(e) => {
+                          if (e.target.checked) setSelectedLangs(prev => [...prev, 'HI']);
+                          else setSelectedLangs(prev => prev.filter(l => l !== 'HI'));
+                      }}
+                      className="w-4 h-4 rounded border-slate-300 dark:border-zinc-700 text-indigo-600 focus:ring-indigo-500 bg-white dark:bg-[#141417]"
+                    />
+                    <span className="text-[13px] font-medium text-slate-700 dark:text-zinc-300 group-hover:text-indigo-600 dark:group-hover:text-zinc-100">Hindi (HI)</span>
+                </label>
+
+                <label className="flex items-center gap-2 group cursor-pointer">
+                    <input 
+                      type="checkbox" 
+                      checked={selectedLangs.includes('MR')}
+                      onChange={(e) => {
+                          if (e.target.checked) setSelectedLangs(prev => [...prev, 'MR']);
+                          else setSelectedLangs(prev => prev.filter(l => l !== 'MR'));
+                      }}
+                      className="w-4 h-4 rounded border-slate-300 dark:border-zinc-700 text-indigo-600 focus:ring-indigo-500 bg-white dark:bg-[#141417]"
+                    />
+                    <span className="text-[13px] font-medium text-slate-700 dark:text-zinc-300 group-hover:text-indigo-600 dark:group-hover:text-zinc-100">Marathi (MR)</span>
+                </label>
+            </div>
+            <p className="text-[10px] font-mono text-slate-400 dark:text-zinc-600 mt-1 uppercase italic">
+              {selectedLangs.length > 1 
+                ? `Pipeline will pause for review after translating to: ${selectedLangs.filter(l => l !== 'EN').join(', ')}` 
+                : "Base English version only — will skip localization step"}
+            </p>
           </div>
 
           {/* Post Image (Optional) */}

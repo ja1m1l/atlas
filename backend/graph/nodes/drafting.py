@@ -16,19 +16,27 @@ def drafting_node(state: ContentOpsState) -> ContentOpsState:
     }).execute()
 
     llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash", temperature=0.7)
-    
+
+    # Determine which channels to generate
+    selected_channels = [c.lower() for c in state.get("channels", [])]
+    # Handle 'twitter' vs 'tw' or 'twitter / x' if needed
+    if 'twitter' in selected_channels or 'twitter / x' in selected_channels:
+        selected_channels.append('twitter')
+
     prompt = ChatPromptTemplate.from_messages([
         ("system", "You are an expert B2B content creator. Your goal is to generate high-engagement, professional social media posts. "
-                   "Each post (LinkedIn, Instagram, Threads) should be a detailed, comprehensive update of approximately 80-100 words. "
+                   f"Generate content ONLY for the following channels: {', '.join(selected_channels)}. "
+                   "Each post should be a detailed, comprehensive update of approximately 80-100 words. "
+                   "CRITICAL: Do NOT include 'T&C Apply' or any similar financial disclaimers in the content. "
                    "Focus on tactical value, use a professional yet slightly italic/modern tone, and include relevant emojis and hashtags. "
                    "Generate the response in strictly valid JSON format without markdown code blocks."),
         ("user", "Mission Title: {topic}\nObjective: {objective}\nTarget Audience: {audience}\nContext Spec: {spec}\n\n"
          "Return a JSON object with these exact keys:\n"
          "- 'draft_text': (string) The main long-form B2B analysis (300+ words).\n"
-         "- 'linkedin_post': (string) A comprehensive LinkedIn post (80-100 words).\n"
-         "- 'instagram_post': (string) An engaging Instagram caption with hashtags (80-100 words).\n"
-         "- 'threads_post': (string) A thoughtful Threads-format update (80-100 words).\n"
-         "- 'tweet': (string) A punchy, high-impact tweet (max 280 chars).\n"
+         "- 'linkedin': (string, only if requested) A comprehensive LinkedIn post.\n"
+         "- 'instagram': (string, only if requested) An engaging Instagram caption.\n"
+         "- 'threads': (string, only if requested) A thoughtful Threads update.\n"
+         "- 'twitter': (string, only if requested) A punchy tweet (max 280 chars).\n"
          "- 'email_subject': (string) A compelling email subject line.")
     ])
 
@@ -55,13 +63,17 @@ def drafting_node(state: ContentOpsState) -> ContentOpsState:
         data = json.loads(content.strip())
         
         state["draft_text"] = data.get("draft_text", "")
-        state["channel_variants"] = {
-            "linkedin": data.get("linkedin_post", ""),
-            "instagram": data.get("instagram_post", ""),
-            "threads": data.get("threads_post", ""),
-            "twitter": data.get("tweet", ""),
-            "email_subject": data.get("email_subject", "")
-        }
+        
+        # Construct variants mapping only what was requested or exists
+        variants = {}
+        for chan in selected_channels:
+            if chan in data: variants[chan] = data[chan]
+            # Handle some variations in LLM response keys
+            elif f"{chan}_post" in data: variants[chan] = data[f"{chan}_post"]
+            elif chan == 'twitter' and 'tweet' in data: variants[chan] = data['tweet']
+        
+        variants["email_subject"] = data.get("email_subject", f"Update: {state['topic']}")
+        state["channel_variants"] = variants
     except Exception as e:
         print(f"AI Drafting failed: {e}")
         raise e  # Fail the pipeline as requested, no mock fallback.

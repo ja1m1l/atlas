@@ -3,11 +3,12 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Job } from '../store/JobContext';
-import { X, Terminal, Box, PlaySquare, AlertCircle, ShieldCheck } from 'lucide-react';
+import { X, Terminal, Box, PlaySquare, AlertCircle, ShieldCheck, CheckCircle, Globe, RefreshCcw } from 'lucide-react';
 
 export function JobDetailPanel({ job, onClose }: { job: Job | null; onClose: () => void }) {
   const [activeTab, setActiveTab] = useState('Overview');
   const [isApproving, setIsApproving] = useState(false);
+  const [isResuming, setIsResuming] = useState(false);
 
   // Editable content state — initialized from job.outputContent
   const [editedContent, setEditedContent] = useState<Record<string, string>>({});
@@ -18,6 +19,24 @@ export function JobDetailPanel({ job, onClose }: { job: Job | null; onClose: () 
       setEditedContent({ ...job.outputContent });
     }
   }, [job]);
+
+  const handleResume = async () => {
+    if (!job || isResuming) return;
+    setIsResuming(true);
+    try {
+      const resp = await fetch(`http://localhost:8000/api/pipeline/resume/${job.id}`, {
+        method: 'POST',
+      });
+      const data = await resp.json();
+      if (!data.success) throw new Error(data.error);
+      // Success! The job status will update via Supabase subscription
+    } catch (err: any) {
+      console.error('Resume logic failure:', err);
+      alert(`Resume failed: ${err.message}`);
+    } finally {
+      setIsResuming(false);
+    }
+  };
 
   const handleContentChange = (platform: string, value: string) => {
     setEditedContent(prev => ({ ...prev, [platform]: value }));
@@ -43,6 +62,8 @@ export function JobDetailPanel({ job, onClose }: { job: Job | null; onClose: () 
   };
 
   const isPending = job?.status === 'Pending';
+  const isL10nReview = job?.status === 'localization_review';
+
   const PLATFORM_LABELS: Record<string, string> = {
     instagram: 'Instagram',
     linkedin: 'LinkedIn',
@@ -50,6 +71,14 @@ export function JobDetailPanel({ job, onClose }: { job: Job | null; onClose: () 
     twitter: 'Twitter / X',
     email_subject: 'Email Subject',
   };
+
+  const LANG_DATA = [
+    { code: 'en', label: 'English', flag: '🇬🇧' },
+    { code: 'hi', label: 'Hindi', flag: '🇮🇳' },
+    { code: 'mr', label: 'Marathi', flag: '🇮🇳' },
+  ];
+
+  const selectedLangs = job?.target_languages ? job.target_languages.map(l => l.toLowerCase()) : ['en'];
 
   return (
     <AnimatePresence>
@@ -73,6 +102,87 @@ export function JobDetailPanel({ job, onClose }: { job: Job | null; onClose: () 
               <X className="w-4 h-4" />
             </button>
           </div>
+
+          {/* PART 5 — Localization Review Panel */}
+          {isL10nReview && (
+            <div className="bg-indigo-600/5 dark:bg-indigo-500/10 border-b border-indigo-100 dark:border-indigo-500/20 p-6 space-y-5">
+              <div className="flex items-start justify-between">
+                <div>
+                  <h3 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                    <Globe className="w-4 h-4 text-indigo-500" />
+                    📋 Localization Review
+                  </h3>
+                  <p className="text-xs text-slate-500 dark:text-zinc-400 mt-1 italic uppercase font-mono tracking-tighter">Review all language versions before sending for approval</p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={handleResume}
+                    disabled={isResuming}
+                    className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-lg text-xs font-bold shadow-lg shadow-emerald-500/20 flex items-center gap-2 transition-all active:scale-95 disabled:opacity-50"
+                  >
+                    {isResuming ? <RefreshCcw className="w-3.5 h-3.5 animate-spin" /> : <CheckCircle className="w-3.5 h-3.5" />}
+                    Looks Good — Send for Approval
+                  </button>
+                  <button className="bg-white dark:bg-white/5 text-slate-600 dark:text-zinc-400 border border-slate-200 dark:border-white/10 px-4 py-2 rounded-lg text-xs font-bold hover:bg-slate-50 dark:hover:bg-white/10 transition-colors">
+                    ✎ Request Changes
+                  </button>
+                </div>
+              </div>
+
+              <div className="flex gap-4 overflow-x-auto pb-2 custom-scrollbar no-scrollbar scroll-smooth">
+                {LANG_DATA.filter(l => selectedLangs.includes(l.code)).map(lang => {
+                  const isEN = lang.code === 'en';
+                  const content = isEN
+                    ? { blog: job.metadata?.draft_text || 'Draft not found', linkedin: job.outputContent?.linkedin || '', tweet: job.outputContent?.twitter || '' }
+                    : job.localized_variants?.[lang.code];
+
+                  const error = content?.error;
+                  const tweetCount = content?.tweet?.length || 0;
+
+                  return (
+                    <div key={lang.code} className="min-w-[220px] max-w-[220px] bg-white dark:bg-[#0c0c0e] rounded-xl border border-slate-200 dark:border-white/10 p-4 shadow-sm group hover:border-indigo-200 dark:hover:border-zinc-700 transition-all flex flex-col h-[340px]">
+                      <div className="flex items-center gap-2 mb-3 pb-2 border-b border-slate-100 dark:border-white/5">
+                        <span className="text-lg">{lang.flag}</span>
+                        <span className="text-[11px] font-bold text-slate-900 dark:text-white uppercase tracking-widest">{lang.label}</span>
+                        {isEN && <span className="text-[9px] font-mono text-indigo-500 dark:text-zinc-500 ml-auto bg-indigo-50 dark:bg-indigo-500/10 px-1 rounded">BASE</span>}
+                      </div>
+
+                      {error ? (
+                        <div className="flex-1 flex flex-col items-center justify-center gap-2 p-4 bg-rose-50/50 dark:bg-rose-500/5 rounded-lg border border-rose-200 dark:border-rose-500/20">
+                          <AlertCircle className="w-6 h-6 text-rose-500" />
+                          <span className="text-[10px] font-mono text-rose-600 dark:text-rose-400 text-center uppercase tracking-tighter">Translation Error</span>
+                          <p className="text-[8px] text-rose-400 dark:text-rose-500/70 text-center truncate w-full">{error}</p>
+                        </div>
+                      ) : (
+                        <div className="flex-1 flex flex-col gap-4 overflow-hidden">
+                          <div className="space-y-1">
+                            <span className="text-[9px] font-mono text-slate-400 dark:text-zinc-500 uppercase tracking-widest font-bold">Blog Post</span>
+                            <p className="text-[11px] text-slate-700 dark:text-zinc-300 font-sans line-clamp-3 bg-slate-50 dark:bg-white/5 p-2 rounded border border-slate-100 dark:border-white/5">{content?.blog || '...'}</p>
+                          </div>
+                          <div className="space-y-1">
+                            <span className="text-[9px] font-mono text-slate-400 dark:text-zinc-500 uppercase tracking-widest font-bold">LinkedIn</span>
+                            <p className="text-[11px] text-slate-700 dark:text-zinc-300 font-sans line-clamp-2 bg-slate-50 dark:bg-white/5 p-2 rounded border border-slate-100 dark:border-white/5">{content?.linkedin || '...'}</p>
+                          </div>
+                          <div className="space-y-1 mt-auto pt-2 border-t border-slate-100 dark:border-white/5">
+                            <div className="flex justify-between items-center mb-1">
+                              <span className="text-[9px] font-mono text-slate-400 dark:text-zinc-500 uppercase tracking-widest font-bold">Tweet</span>
+                              <span className={`text-[9px] font-mono font-bold ${tweetCount > 240 ? 'text-rose-500' : 'text-emerald-500'}`}>{tweetCount}/240 {tweetCount <= 240 ? '✓' : '✖'}</span>
+                            </div>
+                            <p className="text-[11px] text-slate-700 dark:text-zinc-300 font-sans line-clamp-2 bg-slate-50 dark:bg-white/5 p-2 rounded border border-slate-100 dark:border-white/5">{content?.tweet || '...'}</p>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+                {selectedLangs.length === 1 && (
+                  <div className="min-w-[400px] flex items-center border-2 border-dashed border-slate-200 dark:border-white/5 rounded-2xl p-6 bg-slate-50/50 dark:bg-white/[0.02]">
+                    <p className="text-[11px] font-mono text-slate-400 dark:text-zinc-600 italic uppercase">No additional languages were selected for this job mission. Review base English and proceed.</p>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
 
           {/* Sub Nav Tabs */}
           <div className="flex border-b border-slate-200 dark:border-[#27272a]/40 px-6 gap-6 pt-5 bg-white dark:bg-[#0f0f12] shrink-0">
@@ -132,7 +242,7 @@ export function JobDetailPanel({ job, onClose }: { job: Job | null; onClose: () 
               const complianceLog = (job.agentLogs || [])
                 .filter(l => l.agent === 'Compliance Engine' && l.metadata?.compliance_details)
                 .slice().reverse()[0];
-              
+
               const issues = complianceLog?.metadata?.compliance_details || job.metadata?.compliance_details || [];
               const retries = complianceLog?.metadata?.compliance_retries || job.metadata?.compliance_retries || 1;
 
@@ -148,9 +258,9 @@ export function JobDetailPanel({ job, onClose }: { job: Job | null; onClose: () 
                       {issues.map((issue: any, i: number) => (
                         <div key={i} className="bg-rose-50 dark:bg-rose-500/5 border border-rose-200 dark:border-rose-500/20 p-5 rounded-2xl flex flex-col gap-3 ring-1 ring-inset ring-transparent dark:ring-rose-500/10 shadow-sm relative overflow-hidden group">
                           <div className="absolute top-0 right-0 px-3 py-1 bg-white/40 dark:bg-white/5 border-b border-l border-rose-200 dark:border-rose-500/20 rounded-bl-xl text-[9px] font-mono tracking-widest uppercase font-bold text-rose-500">
-                             {issue.severity || 'high'}
+                            {issue.severity || 'high'}
                           </div>
-                          
+
                           <div className="space-y-2">
                             <span className="text-rose-600 dark:text-rose-400 block text-[12px] font-mono font-bold leading-relaxed line-through decoration-rose-500/40">
                               - {issue.sentence}
@@ -167,14 +277,14 @@ export function JobDetailPanel({ job, onClose }: { job: Job | null; onClose: () 
                           </div>
                         </div>
                       ))}
-                      
+
                       {job.status === 'Compliance' && (
-                         <div className="flex items-center justify-center gap-2 pt-2">
-                            <span className="w-1.5 h-1.5 rounded-full bg-rose-500 animate-pulse" />
-                            <span className="text-[10px] font-mono text-rose-500 uppercase tracking-widest">
-                              Issue Remediation in progress — Attempt {retries} of 3
-                            </span>
-                         </div>
+                        <div className="flex items-center justify-center gap-2 pt-2">
+                          <span className="w-1.5 h-1.5 rounded-full bg-rose-500 animate-pulse" />
+                          <span className="text-[10px] font-mono text-rose-500 uppercase tracking-widest">
+                            Issue Remediation in progress — Attempt {retries} of 3
+                          </span>
+                        </div>
                       )}
                     </>
                   )}
@@ -246,7 +356,7 @@ export function JobDetailPanel({ job, onClose }: { job: Job | null; onClose: () 
               ) : (
                 (job.agentLogs || []).map((log, i) => (
                   <div key={i} className="flex gap-4 p-1 hover:bg-slate-100 dark:hover:bg-[#18181b]/50 rounded transition-colors group">
-                    <span className="text-slate-400 dark:text-zinc-600 shrink-0 w-[50px]">{new Date(log.time).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</span>
+                    <span className="text-slate-400 dark:text-zinc-600 shrink-0 w-[50px]">{new Date(log.time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
                     <span className={`w-[90px] shrink-0 tracking-wider font-semibold ${log.agent === 'System' ? 'text-slate-500 dark:text-zinc-500' : 'text-indigo-600 dark:text-zinc-300'}`}>{log.agent}</span>
                     <span className="text-slate-600 dark:text-zinc-400 leading-relaxed group-hover:text-slate-900 dark:group-hover:text-zinc-200 transition-colors">{log.message}</span>
                   </div>

@@ -3,7 +3,7 @@
 import React, { createContext, useContext, useReducer, useEffect, ReactNode } from 'react';
 import { supabase } from '@/lib/supabase';
 
-export type JobStatus = 'Drafting' | 'Compliance' | 'Localization' | 'Pending' | 'Publishing' | 'Published';
+export type JobStatus = 'Drafting' | 'Compliance' | 'Localization' | 'localization_review' | 'Pending' | 'Publishing' | 'Published';
 
 export interface Job {
   id: string;
@@ -11,11 +11,13 @@ export interface Job {
   topic: string;
   audience: string;
   languages: string[];
+  target_languages?: string[];
   status: JobStatus;
   progress: number;
   complianceIssues: number;
   createdAt: string;
   outputContent?: Record<string, string>;
+  localized_variants?: Record<string, any>;
   imageUrl?: string;
   publishedChannels?: string[];
   agentLogs?: { agent: string, message: string, time: string, metadata?: any }[];
@@ -33,6 +35,7 @@ type JobAction =
   | { type: 'UPSERT_JOB'; payload: Job }
   | { type: 'SET_ACTIVE_TAB'; payload: string }
   | { type: 'ADD_LOG'; payload: { id: string; metadata?: any; log: { agent: string, message: string, time: string, metadata?: any } } }
+  | { type: 'SET_L10N'; payload: { job_id: string; lang: string; variant: any } }
   | { type: 'SET_LOADING'; payload: boolean };
 
 const initialState: JobState = {
@@ -75,6 +78,22 @@ const jobReducer = (state: JobState, action: JobAction): JobState => {
         ),
       };
     }
+    case 'SET_L10N': {
+      return {
+        ...state,
+        jobs: state.jobs.map(job =>
+          job.id === action.payload.job_id
+            ? { 
+                ...job, 
+                localized_variants: {
+                    ...(job.localized_variants || {}),
+                    [action.payload.lang]: action.payload.variant
+                }
+              }
+            : job
+        ),
+      };
+    }
     case 'SET_LOADING':
       return { ...state, loading: action.payload };
     default:
@@ -101,26 +120,46 @@ export const JobProvider = ({ children }: { children: ReactNode }) => {
         return;
       }
 
-      // 2. Fetch Logs for these jobs
-      const { data: logsData, error: logsError } = await supabase
+      // 2. Fetch Logs
+      const { data: logsData } = await supabase
         .from('agent_logs')
         .select('*')
         .order('created_at', { ascending: true });
 
-      const jobsWithLogs: Job[] = (jobsData || []).map(j => {
+      // 3. Fetch Localizations
+      const { data: l10nData } = await supabase
+        .from('localizations')
+        .select('*');
+
+      const jobsWithData: Job[] = (jobsData || []).map(j => {
         const jLogs = (logsData || []).filter((l: any) => l.job_id === j.id);
         const lVar = jLogs.slice().reverse().find((l: any) => l.metadata && l.metadata.variants);
+        
+        // Map localizations to Job object
+        const localized_variants: Record<string, any> = {};
+        (l10nData || []).filter((l: any) => l.job_id === j.id).forEach((l: any) => {
+           try {
+               localized_variants[l.language_code] = typeof l.translated_body === 'string' 
+                ? JSON.parse(l.translated_body) 
+                : l.translated_body;
+           } catch(e) {
+               localized_variants[l.language_code] = { error: 'Failed to parse' };
+           }
+        });
+
         return {
           id: j.id,
           display_id: j.display_id,
           topic: j.topic,
           audience: j.audience,
           languages: j.languages,
+          target_languages: j.target_languages || j.languages, // Fallback
           status: j.status as JobStatus,
           progress: j.progress,
           complianceIssues: j.compliance_issues,
           createdAt: j.created_at,
           outputContent: lVar ? lVar.metadata.variants : undefined,
+          localized_variants,
           imageUrl: j.image_url,
           publishedChannels: j.published_channels,
           agentLogs: jLogs.map((l: any) => ({ 
@@ -133,7 +172,7 @@ export const JobProvider = ({ children }: { children: ReactNode }) => {
         };
       });
 
-      dispatch({ type: 'SET_JOBS', payload: jobsWithLogs });
+      dispatch({ type: 'SET_JOBS', payload: jobsWithData });
     };
 
     fetchInitialData();
@@ -152,11 +191,13 @@ export const JobProvider = ({ children }: { children: ReactNode }) => {
               topic: newJob.topic,
               audience: newJob.audience,
               languages: newJob.languages,
+              target_languages: newJob.target_languages,
               status: newJob.status as JobStatus,
               progress: newJob.progress,
               complianceIssues: newJob.compliance_issues,
               createdAt: newJob.created_at,
               imageUrl: newJob.image_url,
+              localized_variants: newJob.localized_variants,
               publishedChannels: newJob.published_channels,
               metadata: newJob.metadata
             }
@@ -187,9 +228,28 @@ export const JobProvider = ({ children }: { children: ReactNode }) => {
       })
       .subscribe();
 
+    const l10nSubscription = supabase
+      .channel('public:localizations')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'localizations' }, payload => {
+        const item = payload.new as any;
+        if (item) {
+          try {
+            const variant = typeof item.translated_body === 'string' 
+              ? JSON.parse(item.translated_body) 
+              : item.translated_body;
+            dispatch({
+              type: 'SET_L10N',
+              payload: { job_id: item.job_id, lang: item.language_code, variant }
+            });
+          } catch(e) {}
+        }
+      })
+      .subscribe();
+
     return () => {
       supabase.removeChannel(jobsSubscription);
       supabase.removeChannel(logsSubscription);
+      supabase.removeChannel(l10nSubscription);
     };
   }, []);
 

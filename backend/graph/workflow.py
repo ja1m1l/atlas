@@ -31,7 +31,6 @@ def create_workflow():
         "localization": "localization"
     })
     
-    workflow.add_edge("localization", "approval")
-    workflow.add_edge("approval", END)
+    workflow.add_edge("localization", END)
     
     return workflow.compile()

@@ -28,6 +28,7 @@ from apscheduler.schedulers.background import BackgroundScheduler
 from backend.supabase_client import get_supabase_client
 from backend.graph.workflow import create_workflow
 from backend.graph.nodes.publishing import publishing_node
+from backend.graph.nodes.approval import approval_node
 
 # --- Pydantic Models for Compliance Management ---
 class TermRequest(BaseModel):
@@ -149,7 +150,7 @@ class PipelineStartRequest(BaseModel):
     objective: str
     audience: str
     channels: List[str] = Field(default=["Instagram", "Threads", "LinkedIn", "Twitter"])
-    languages: List[str] = Field(default=["EN"])
+    target_languages: List[str] = Field(default=["en"])
     spec_text: str = ""
     image_url: str = ""
 
@@ -227,6 +228,15 @@ async def upload_file(file: UploadFile = File(...)):
 async def start_pipeline(req: PipelineStartRequest, background_tasks: BackgroundTasks):
     try:
         supabase = get_supabase_client()
+        
+        # Validation
+        ALLOWED_LANGS = {'en', 'hi', 'mr'}
+        received = set(req.target_languages)
+        invalid = received - ALLOWED_LANGS
+        if invalid:
+            raise HTTPException(status_code=400, detail=f'Unsupported languages: {invalid}')
+        target_languages = list(received | {'en'})  # always include en
+        
         job_id = str(uuid.uuid4())
         existing = supabase.table("jobs").select("id", count="exact").eq("organization_id", req.organization_id).execute()
         seq = (existing.count or 0) + 1
@@ -238,7 +248,7 @@ async def start_pipeline(req: PipelineStartRequest, background_tasks: Background
             "display_id": display_id,
             "topic": req.topic,
             "audience": req.audience,
-            "languages": req.languages,
+            "languages": target_languages,
             "status": "Drafting",
             "progress": 0,
             "compliance_issues": 0,
@@ -262,7 +272,7 @@ async def start_pipeline(req: PipelineStartRequest, background_tasks: Background
             "objective": req.objective,
             "audience": req.audience,
             "channels": req.channels,
-            "target_languages": req.languages,
+            "target_languages": target_languages,
             "spec_text": req.spec_text,
             "draft_text": "",
             "image_url": req.image_url,
@@ -279,6 +289,55 @@ async def start_pipeline(req: PipelineStartRequest, background_tasks: Background
     except Exception as e:
         logger.error(f"Startup Failure: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/pipeline/resume/{job_id}")
+async def resume_pipeline(job_id: str, background_tasks: BackgroundTasks):
+    """Resume the pipeline from localization review to approval."""
+    try:
+        supabase = get_supabase_client()
+        result = supabase.table('jobs').select('*').eq('id', job_id).execute()
+        if not result.data:
+            return {'success': False, 'error': 'Job not found'}
+        
+        job_data = result.data[0]
+        if job_data['status'] != 'Localization' or job_data.get('progress') != 80:
+            return {'success': False, 'error': f'Job is not in localization_review state. Current: {job_data["status"]} @ {job_data.get("progress")}%'}
+        
+        # Move to pending_approval
+        supabase.table('jobs').update({'status': 'pending_approval'}).eq('id', job_id).execute()
+        
+        # Prepare state for approval_node
+        # We need to fetch related data to recreate the state
+        logs = supabase.table("agent_logs").select("*").eq("job_id", job_id).execute()
+        
+        state = {
+            "job_id": job_id,
+            "org_id": job_data["organization_id"],
+            "topic": job_data.get("topic", ""),
+            "objective": job_data.get("objective", ""),
+            "audience": job_data.get("audience", ""),
+            "target_languages": job_data.get("target_languages", ["en"]),
+            "channels": job_data.get("channels", []),
+            "spec_text": "",
+            "draft_text": job_data.get("draft_text", ""), # Assuming this was updated in previous steps
+            "image_url": job_data.get("image_url", ""),
+            "channel_variants": job_data.get("output_content") or {},
+            "compliance_result": {}, # Can be more detailed if needed
+            "compliance_retries": 0,
+            "localized_variants": job_data.get("localized_variants") or {},
+            "approval_status": "pending",
+            "audit_log": [],
+        }
+        
+        # If draft_text is not in job, try to get from job_content if needed. 
+        # But for now, assume it's available or we fetch the latest variant.
+
+        background_tasks.add_task(approval_node, state)
+        
+        return {'success': True, 'data': {'message': 'Pipeline resumed, approval triggered'}}
+    except Exception as e:
+        logger.error(f"Resume Failure: {e}")
+        return {'success': False, 'error': str(e)}
 
 @app.post("/webhook/publer")
 async def publer_webhook(payload: PublerWebhookPayload):
