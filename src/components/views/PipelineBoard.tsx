@@ -21,7 +21,12 @@ export function PipelineBoard() {
   return (
     <div className="flex h-full w-full overflow-x-auto px-6 py-8 gap-4 bg-transparent items-start custom-scrollbar">
       {COLUMNS.map(column => {
-        const jobs = state.jobs.filter(j => j.status === column.id);
+        const jobs = state.jobs.filter(j => {
+          if (column.id === 'Localization') {
+            return j.status === 'Localization' || j.status === 'localization_review';
+          }
+          return j.status === column.id;
+        });
         
         return (
           <div key={column.id} className="flex-shrink-0 w-[290px] h-full flex flex-col max-h-full">

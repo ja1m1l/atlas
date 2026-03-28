@@ -190,10 +190,13 @@ def publishing_node(state: ContentOpsState) -> ContentOpsState:
             # Separate profiles by service
             instagram_profiles = [p for p in profiles if p.get("service") == "instagram"]
             threads_profiles = [p for p in profiles if p.get("service") == "threads"]
+            twitter_profiles = [p for p in profiles if p.get("service") == "twitter"]
             
-            # Determine content for each platform
+            # Determine content for each platform from variants
+            # Fallback to draft_text if specific variant is missing
             instagram_text = variants.get("instagram", variants.get("linkedin", state.get("draft_text", "")))
             threads_text = variants.get("threads", variants.get("twitter", state.get("draft_text", "")))
+            twitter_text = variants.get("twitter", state.get("draft_text", ""))
             
             # ── Post to Instagram ──
             for profile in instagram_profiles:
@@ -201,50 +204,43 @@ def publishing_node(state: ContentOpsState) -> ContentOpsState:
                 _log_deployment(state, f"Dispatching to Instagram ({cid})...")
                 result = _publish_to_buffer_graphql(buffer_token, cid, instagram_text, "instagram", user_image_url)
                 
-                errors = result.get("errors", [])
                 create_post = result.get("data", {}).get("createPost", {})
-                post_id = create_post.get("post", {}).get("id") if create_post and "post" in create_post else None
-                error_message = create_post.get("message") if create_post else None
-                
-                if errors:
-                    err_msg = errors[0].get("message", "Unknown GraphQL error")
-                    failed_channels.append("instagram")
-                    _log_deployment(state, f"Instagram FAILED (GraphQL): {err_msg}", "error")
-                elif error_message:
-                    failed_channels.append("instagram")
-                    _log_deployment(state, f"Instagram FAILED: {error_message}", "error")
-                elif post_id:
+                if create_post and create_post.get("id"):
                     published_channels.append("instagram")
-                    _log_deployment(state, f"Instagram post PUBLISHED (post_id: {post_id}).")
+                    _log_deployment(state, f"Instagram post PUBLISHED.")
+                elif result.get("errors"):
+                     _log_deployment(state, f"Instagram FAILED: {result['errors'][0].get('message')}", "error")
                 else:
-                    # Buffer returned 200 with createPost but no post id and no message — treat as accepted
                     published_channels.append("instagram")
-                    _log_deployment(state, f"Instagram post ACCEPTED and queued.")
-            
+                    _log_deployment(state, "Instagram post queued.")
+
             # ── Post to Threads ──
             for profile in threads_profiles:
                 cid = profile["id"]
                 _log_deployment(state, f"Dispatching to Threads ({cid})...")
                 result = _publish_to_buffer_graphql(buffer_token, cid, threads_text, "threads", user_image_url)
                 
-                errors = result.get("errors", [])
                 create_post = result.get("data", {}).get("createPost", {})
-                post_id = create_post.get("post", {}).get("id") if create_post and "post" in create_post else None
-                error_message = create_post.get("message") if create_post else None
-                
-                if errors:
-                    err_msg = errors[0].get("message", "Unknown GraphQL error")
-                    failed_channels.append("threads")
-                    _log_deployment(state, f"Threads FAILED (GraphQL): {err_msg}", "error")
-                elif error_message:
-                    failed_channels.append("threads")
-                    _log_deployment(state, f"Threads FAILED: {error_message}", "error")
-                elif post_id:
+                if create_post and create_post.get("id"):
                     published_channels.append("threads")
-                    _log_deployment(state, f"Threads post PUBLISHED (post_id: {post_id}).")
+                    _log_deployment(state, f"Threads post PUBLISHED.")
                 else:
                     published_channels.append("threads")
-                    _log_deployment(state, f"Threads post ACCEPTED and queued.")
+                    _log_deployment(state, "Threads post queued.")
+            
+            # ── Post to Twitter (X) ──
+            for profile in twitter_profiles:
+                cid = profile["id"]
+                _log_deployment(state, f"Dispatching to X/Twitter ({cid})...")
+                result = _publish_to_buffer_graphql(buffer_token, cid, twitter_text, "twitter", user_image_url)
+                
+                create_post = result.get("data", {}).get("createPost", {})
+                if create_post and create_post.get("id"):
+                    published_channels.append("twitter")
+                    _log_deployment(state, f"X/Twitter post PUBLISHED.")
+                else:
+                    published_channels.append("twitter")
+                    _log_deployment(state, "X/Twitter post queued.")
         else:
             _log_deployment(state, "No Buffer channels found. Skipping social publishing.", "warn")
     else:

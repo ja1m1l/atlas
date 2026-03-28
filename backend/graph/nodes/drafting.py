@@ -1,8 +1,12 @@
+import os
 import json
+import logging
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.prompts import ChatPromptTemplate
 from backend.supabase_client import get_supabase_client
 from backend.graph.state import ContentOpsState
+
+logger = logging.getLogger("atlasops")
 
 def drafting_node(state: ContentOpsState) -> ContentOpsState:
     supabase = get_supabase_client()
@@ -15,13 +19,24 @@ def drafting_node(state: ContentOpsState) -> ContentOpsState:
         "severity": "info"
     }).execute()
 
-    llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash", temperature=0.7)
+    # Sanitize API Key (remove comments and spaces)
+    raw_key = os.environ.get("GOOGLE_API_KEY", "")
+    api_key = raw_key.split("#")[0].strip() if raw_key else None
+    
+    # Use standard stable model name
+    llm = ChatGoogleGenerativeAI(
+        model="gemini-2.5-flash", 
+        google_api_key=api_key,
+        temperature=0.7
+    )
 
     # Determine which channels to generate
     selected_channels = [c.lower() for c in state.get("channels", [])]
-    # Handle 'twitter' vs 'tw' or 'twitter / x' if needed
+    # Standardize names
     if 'twitter' in selected_channels or 'twitter / x' in selected_channels:
-        selected_channels.append('twitter')
+        if 'twitter' not in selected_channels: selected_channels.append('twitter')
+    if 'threads' in selected_channels:
+        if 'threads' not in selected_channels: selected_channels.append('threads')
 
     prompt = ChatPromptTemplate.from_messages([
         ("system", "You are an expert B2B content creator. Your goal is to generate high-engagement, professional social media posts. "
@@ -67,16 +82,27 @@ def drafting_node(state: ContentOpsState) -> ContentOpsState:
         # Construct variants mapping only what was requested or exists
         variants = {}
         for chan in selected_channels:
-            if chan in data: variants[chan] = data[chan]
-            # Handle some variations in LLM response keys
-            elif f"{chan}_post" in data: variants[chan] = data[f"{chan}_post"]
-            elif chan == 'twitter' and 'tweet' in data: variants[chan] = data['tweet']
+            # Try to match the key directly or with variations
+            val = data.get(chan) or data.get(f"{chan}_post") or data.get(f"{chan}_caption")
+            if chan == 'twitter' and not val:
+                val = data.get('tweet')
+            
+            if val:
+                variants[chan] = val
         
         variants["email_subject"] = data.get("email_subject", f"Update: {state['topic']}")
         state["channel_variants"] = variants
     except Exception as e:
-        print(f"AI Drafting failed: {e}")
-        raise e  # Fail the pipeline as requested, no mock fallback.
+        logger.error(f"AI Drafting failed: {e}")
+        # Log to agent_logs so user sees why it failed
+        supabase.table("agent_logs").insert({
+            "job_id": state["job_id"],
+            "organization_id": state["org_id"],
+            "agent_name": "System",
+            "message": f"AI Generation Failed: {str(e)}",
+            "severity": "critical"
+        }).execute()
+        raise e
         
     # Update Supabase
     supabase.table("jobs").update({

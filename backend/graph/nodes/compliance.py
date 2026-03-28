@@ -1,3 +1,4 @@
+import os
 import json
 import logging
 from langchain_google_genai import ChatGoogleGenerativeAI
@@ -94,7 +95,15 @@ def compliance_node(state: ContentOpsState) -> ContentOpsState:
         except:
            pass
 
-    llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash", temperature=0)
+    # Sanitize API Key
+    raw_key = os.environ.get("GOOGLE_API_KEY", "")
+    api_key = raw_key.split("#")[0].strip() if raw_key else None
+
+    llm = ChatGoogleGenerativeAI(
+        model="gemini-2.5-flash", 
+        google_api_key=api_key,
+        temperature=0
+    )
     
     prompt_content = build_compliance_prompt(state.get("draft_text", ""), rules)
     

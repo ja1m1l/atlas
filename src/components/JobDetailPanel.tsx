@@ -62,7 +62,8 @@ export function JobDetailPanel({ job, onClose }: { job: Job | null; onClose: () 
   };
 
   const isPending = job?.status === 'Pending';
-  const isL10nReview = job?.status === 'localization_review';
+  const isL10nReview = job?.status === 'Localization' && job?.progress === 80;
+  const isL10nProcessing = job?.status === 'Localization' && job?.progress < 80;
 
   const PLATFORM_LABELS: Record<string, string> = {
     instagram: 'Instagram',
@@ -103,83 +104,22 @@ export function JobDetailPanel({ job, onClose }: { job: Job | null; onClose: () 
             </button>
           </div>
 
-          {/* PART 5 — Localization Review Panel */}
+          {/* PART 5 — Localization Review Banner */}
           {isL10nReview && (
-            <div className="bg-indigo-600/5 dark:bg-indigo-500/10 border-b border-indigo-100 dark:border-indigo-500/20 p-6 space-y-5">
-              <div className="flex items-start justify-between">
-                <div>
-                  <h3 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
-                    <Globe className="w-4 h-4 text-indigo-500" />
-                    📋 Localization Review
-                  </h3>
-                  <p className="text-xs text-slate-500 dark:text-zinc-400 mt-1 italic uppercase font-mono tracking-tighter">Review all language versions before sending for approval</p>
-                </div>
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={handleResume}
-                    disabled={isResuming}
-                    className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-lg text-xs font-bold shadow-lg shadow-emerald-500/20 flex items-center gap-2 transition-all active:scale-95 disabled:opacity-50"
-                  >
-                    {isResuming ? <RefreshCcw className="w-3.5 h-3.5 animate-spin" /> : <CheckCircle className="w-3.5 h-3.5" />}
-                    Looks Good — Send for Approval
-                  </button>
-                  <button className="bg-white dark:bg-white/5 text-slate-600 dark:text-zinc-400 border border-slate-200 dark:border-white/10 px-4 py-2 rounded-lg text-xs font-bold hover:bg-slate-50 dark:hover:bg-white/10 transition-colors">
-                    ✎ Request Changes
-                  </button>
-                </div>
+            <div className="bg-indigo-600/5 dark:bg-indigo-500/10 border-b border-indigo-100 dark:border-indigo-500/20 px-6 py-4 flex items-center justify-between shrink-0">
+              <div className="flex items-center gap-2 text-indigo-700 dark:text-indigo-400">
+                <Globe className="w-4 h-4" />
+                <span className="text-xs font-bold uppercase tracking-widest font-mono">Review Regional Content</span>
               </div>
-
-              <div className="flex gap-4 overflow-x-auto pb-2 custom-scrollbar no-scrollbar scroll-smooth">
-                {LANG_DATA.filter(l => selectedLangs.includes(l.code)).map(lang => {
-                  const isEN = lang.code === 'en';
-                  const content = isEN
-                    ? { blog: job.metadata?.draft_text || 'Draft not found', linkedin: job.outputContent?.linkedin || '', tweet: job.outputContent?.twitter || '' }
-                    : job.localized_variants?.[lang.code];
-
-                  const error = content?.error;
-                  const tweetCount = content?.tweet?.length || 0;
-
-                  return (
-                    <div key={lang.code} className="min-w-[220px] max-w-[220px] bg-white dark:bg-[#0c0c0e] rounded-xl border border-slate-200 dark:border-white/10 p-4 shadow-sm group hover:border-indigo-200 dark:hover:border-zinc-700 transition-all flex flex-col h-[340px]">
-                      <div className="flex items-center gap-2 mb-3 pb-2 border-b border-slate-100 dark:border-white/5">
-                        <span className="text-lg">{lang.flag}</span>
-                        <span className="text-[11px] font-bold text-slate-900 dark:text-white uppercase tracking-widest">{lang.label}</span>
-                        {isEN && <span className="text-[9px] font-mono text-indigo-500 dark:text-zinc-500 ml-auto bg-indigo-50 dark:bg-indigo-500/10 px-1 rounded">BASE</span>}
-                      </div>
-
-                      {error ? (
-                        <div className="flex-1 flex flex-col items-center justify-center gap-2 p-4 bg-rose-50/50 dark:bg-rose-500/5 rounded-lg border border-rose-200 dark:border-rose-500/20">
-                          <AlertCircle className="w-6 h-6 text-rose-500" />
-                          <span className="text-[10px] font-mono text-rose-600 dark:text-rose-400 text-center uppercase tracking-tighter">Translation Error</span>
-                          <p className="text-[8px] text-rose-400 dark:text-rose-500/70 text-center truncate w-full">{error}</p>
-                        </div>
-                      ) : (
-                        <div className="flex-1 flex flex-col gap-4 overflow-hidden">
-                          <div className="space-y-1">
-                            <span className="text-[9px] font-mono text-slate-400 dark:text-zinc-500 uppercase tracking-widest font-bold">Blog Post</span>
-                            <p className="text-[11px] text-slate-700 dark:text-zinc-300 font-sans line-clamp-3 bg-slate-50 dark:bg-white/5 p-2 rounded border border-slate-100 dark:border-white/5">{content?.blog || '...'}</p>
-                          </div>
-                          <div className="space-y-1">
-                            <span className="text-[9px] font-mono text-slate-400 dark:text-zinc-500 uppercase tracking-widest font-bold">LinkedIn</span>
-                            <p className="text-[11px] text-slate-700 dark:text-zinc-300 font-sans line-clamp-2 bg-slate-50 dark:bg-white/5 p-2 rounded border border-slate-100 dark:border-white/5">{content?.linkedin || '...'}</p>
-                          </div>
-                          <div className="space-y-1 mt-auto pt-2 border-t border-slate-100 dark:border-white/5">
-                            <div className="flex justify-between items-center mb-1">
-                              <span className="text-[9px] font-mono text-slate-400 dark:text-zinc-500 uppercase tracking-widest font-bold">Tweet</span>
-                              <span className={`text-[9px] font-mono font-bold ${tweetCount > 240 ? 'text-rose-500' : 'text-emerald-500'}`}>{tweetCount}/240 {tweetCount <= 240 ? '✓' : '✖'}</span>
-                            </div>
-                            <p className="text-[11px] text-slate-700 dark:text-zinc-300 font-sans line-clamp-2 bg-slate-50 dark:bg-white/5 p-2 rounded border border-slate-100 dark:border-white/5">{content?.tweet || '...'}</p>
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-                {selectedLangs.length === 1 && (
-                  <div className="min-w-[400px] flex items-center border-2 border-dashed border-slate-200 dark:border-white/5 rounded-2xl p-6 bg-slate-50/50 dark:bg-white/[0.02]">
-                    <p className="text-[11px] font-mono text-slate-400 dark:text-zinc-600 italic uppercase">No additional languages were selected for this job mission. Review base English and proceed.</p>
-                  </div>
-                )}
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={handleResume}
+                  disabled={isResuming}
+                  className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-1.5 rounded-lg text-[11px] font-bold shadow-sm flex items-center gap-2 transition-all active:scale-95 disabled:opacity-50"
+                >
+                  {isResuming ? <RefreshCcw className="w-3.5 h-3.5 animate-spin" /> : <CheckCircle className="w-3.5 h-3.5" />}
+                  SEND FOR APPROVAL
+                </button>
               </div>
             </div>
           )}
@@ -320,8 +260,84 @@ export function JobDetailPanel({ job, onClose }: { job: Job | null; onClose: () 
             )}
 
             {activeTab === 'Localization' && (
-              <div className="flex items-center justify-center h-48 text-slate-400 dark:text-zinc-600 font-mono text-xs uppercase tracking-widest">
-                Module Inactive
+              <div className="space-y-6">
+                <div className="grid grid-cols-1 gap-4">
+                  {LANG_DATA.filter(l => selectedLangs.includes(l.code)).map(lang => {
+                    const isEN = lang.code === 'en';
+                    const content = isEN
+                      ? { 
+                          blog: job.metadata?.draft_text || 'Draft content will appear here...', 
+                          linkedin: job.outputContent?.linkedin || 'Waiting for LinkedIn variant...', 
+                          twitter: job.outputContent?.twitter || 'Waiting for Twitter variant...' 
+                        }
+                      : job.localized_variants?.[lang.code];
+
+                    const error = content?.error;
+                    const tweetCount = content?.twitter?.length || 0;
+
+                    return (
+                      <div key={lang.code} className="bg-white dark:bg-[#141417] rounded-2xl border border-slate-200 dark:border-[#27272a]/60 p-6 shadow-sm ring-1 ring-inset ring-transparent dark:ring-white/5">
+                        <div className="flex items-center justify-between mb-4 pb-3 border-b border-slate-100 dark:border-white/5">
+                          <div className="flex items-center gap-3">
+                            <span className="text-xl leading-none">{lang.flag}</span>
+                            <h4 className="text-[12px] font-bold text-slate-900 dark:text-white uppercase tracking-widest">{lang.label} Version</h4>
+                          </div>
+                          {isEN && <span className="text-[9px] font-mono text-indigo-500 dark:text-zinc-500 bg-indigo-50 dark:bg-indigo-500/10 px-2 py-0.5 rounded border border-indigo-100 dark:border-indigo-500/20 font-bold uppercase">Source Material</span>}
+                          {!isEN && !content && !error && (
+                            <div className="flex items-center gap-2">
+                              <RefreshCcw className="w-3 h-3 text-indigo-500 animate-spin" />
+                              <span className="text-[9px] font-mono text-indigo-500 uppercase font-bold">Translating...</span>
+                            </div>
+                          )}
+                        </div>
+
+                        {error ? (
+                          <div className="bg-rose-50 dark:bg-rose-500/5 border border-rose-200 dark:border-rose-500/20 rounded-xl p-4 flex items-center gap-3">
+                            <AlertCircle className="w-5 h-5 text-rose-500" />
+                            <div>
+                              <p className="text-[11px] font-bold text-rose-700 dark:text-rose-400 uppercase tracking-tight">Translation Bridge Fault</p>
+                              <p className="text-[10px] text-rose-500/80 font-mono mt-0.5">{error}</p>
+                            </div>
+                          </div>
+                        ) : !isEN && !content ? (
+                          <div className="animate-pulse space-y-4 py-2">
+                            <div className="h-20 bg-slate-100 dark:bg-white/5 rounded-xl w-full"></div>
+                            <div className="h-12 bg-slate-100 dark:bg-white/5 rounded-xl w-full"></div>
+                          </div>
+                        ) : (
+                          <div className="space-y-5">
+                            <div className="space-y-2">
+                              <label className="text-[10px] font-mono text-slate-500 dark:text-zinc-500 uppercase tracking-widest font-bold">Blog / Long-form Draft</label>
+                              <div className="bg-slate-50 dark:bg-[#0c0c0e] p-4 rounded-xl border border-slate-200 dark:border-[#27272a]/60 text-[13px] text-slate-700 dark:text-zinc-300 leading-relaxed font-sans max-h-[160px] overflow-y-auto custom-scrollbar whitespace-pre-wrap">
+                                {content?.blog || '...'}
+                              </div>
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-4">
+                              <div className="space-y-2">
+                                <label className="text-[10px] font-mono text-slate-500 dark:text-zinc-500 uppercase tracking-widest font-bold">LinkedIn Variant</label>
+                                <div className="bg-slate-50 dark:bg-[#0c0c0e] p-4 rounded-xl border border-slate-200 dark:border-[#27272a]/60 text-[12px] text-slate-600 dark:text-zinc-400 font-sans leading-relaxed min-h-[100px] whitespace-pre-wrap italic">
+                                  {content?.linkedin || '...'}
+                                </div>
+                              </div>
+                              <div className="space-y-2">
+                                <div className="flex justify-between items-center">
+                                  <label className="text-[10px] font-mono text-slate-500 dark:text-zinc-500 uppercase tracking-widest font-bold">Twitter Variant</label>
+                                  <span className={`text-[10px] font-mono font-bold ${tweetCount > 240 ? 'text-rose-500' : 'text-emerald-500'}`}>
+                                    {tweetCount}/240 {tweetCount <= 240 ? '✓' : '⚠'}
+                                  </span>
+                                </div>
+                                <div className="bg-slate-50 dark:bg-[#0c0c0e] p-4 rounded-xl border border-slate-200 dark:border-[#27272a]/60 text-[12px] text-slate-600 dark:text-zinc-400 font-sans leading-relaxed min-h-[100px] whitespace-pre-wrap italic">
+                                  {content?.twitter || '...'}
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
             )}
           </div>

@@ -150,9 +150,12 @@ class PipelineStartRequest(BaseModel):
     objective: str
     audience: str
     channels: List[str] = Field(default=["Instagram", "Threads", "LinkedIn", "Twitter"])
-    target_languages: List[str] = Field(default=["en"])
+    target_languages: List[str] = Field(default=["en"], alias="languages")
     spec_text: str = ""
     image_url: str = ""
+
+    class Config:
+        populate_by_name = True
 
 class PipelineStartResponse(BaseModel):
     job_id: str
@@ -231,7 +234,7 @@ async def start_pipeline(req: PipelineStartRequest, background_tasks: Background
         
         # Validation
         ALLOWED_LANGS = {'en', 'hi', 'mr'}
-        received = set(req.target_languages)
+        received = {l.lower() for l in req.target_languages}
         invalid = received - ALLOWED_LANGS
         if invalid:
             raise HTTPException(status_code=400, detail=f'Unsupported languages: {invalid}')
@@ -300,11 +303,13 @@ async def resume_pipeline(job_id: str, background_tasks: BackgroundTasks):
             return {'success': False, 'error': 'Job not found'}
         
         job_data = result.data[0]
-        if job_data['status'] != 'Localization' or job_data.get('progress') != 80:
-            return {'success': False, 'error': f'Job is not in localization_review state. Current: {job_data["status"]} @ {job_data.get("progress")}%'}
+        # Support both casing/legacy and new review status
+        is_reviewable = job_data['status'] in ['Localization', 'localization_review']
+        if not is_reviewable or job_data.get('progress') != 80:
+            return {'success': False, 'error': f'Job is not in review state. Current: {job_data["status"]} @ {job_data.get("progress")}%'}
         
-        # Move to pending_approval
-        supabase.table('jobs').update({'status': 'pending_approval'}).eq('id', job_id).execute()
+        # Move to Pending (capitalized as per JobContext type)
+        supabase.table('jobs').update({'status': 'Pending'}).eq('id', job_id).execute()
         
         # Prepare state for approval_node
         # We need to fetch related data to recreate the state
