@@ -18,7 +18,8 @@ export interface Job {
   outputContent?: Record<string, string>;
   imageUrl?: string;
   publishedChannels?: string[];
-  agentLogs?: { agent: string, message: string, time: string }[];
+  agentLogs?: { agent: string, message: string, time: string, metadata?: any }[];
+  metadata?: any;
 }
 
 interface JobState {
@@ -31,7 +32,7 @@ type JobAction =
   | { type: 'SET_JOBS'; payload: Job[] }
   | { type: 'UPSERT_JOB'; payload: Job }
   | { type: 'SET_ACTIVE_TAB'; payload: string }
-  | { type: 'ADD_LOG'; payload: { id: string; metadata?: any; log: { agent: string, message: string, time: string } } }
+  | { type: 'ADD_LOG'; payload: { id: string; metadata?: any; log: { agent: string, message: string, time: string, metadata?: any } } }
   | { type: 'SET_LOADING'; payload: boolean };
 
 const initialState: JobState = {
@@ -122,7 +123,13 @@ export const JobProvider = ({ children }: { children: ReactNode }) => {
           outputContent: lVar ? lVar.metadata.variants : undefined,
           imageUrl: j.image_url,
           publishedChannels: j.published_channels,
-          agentLogs: jLogs.map((l: any) => ({ agent: l.agent_name, message: l.message, time: l.created_at }))
+          agentLogs: jLogs.map((l: any) => ({ 
+            agent: l.agent_name, 
+            message: l.message, 
+            time: l.created_at,
+            metadata: l.metadata 
+          })),
+          metadata: j.metadata
         };
       });
 
@@ -151,6 +158,7 @@ export const JobProvider = ({ children }: { children: ReactNode }) => {
               createdAt: newJob.created_at,
               imageUrl: newJob.image_url,
               publishedChannels: newJob.published_channels,
+              metadata: newJob.metadata
             }
           });
         }
@@ -167,7 +175,12 @@ export const JobProvider = ({ children }: { children: ReactNode }) => {
             payload: {
               id: newLog.job_id,
               metadata: newLog.metadata,
-              log: { agent: newLog.agent_name, message: newLog.message, time: newLog.created_at }
+              log: { 
+                agent: newLog.agent_name, 
+                message: newLog.message, 
+                time: newLog.created_at,
+                metadata: newLog.metadata 
+              }
             }
           });
         }

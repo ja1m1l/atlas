@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Job } from '../store/JobContext';
-import { X, Terminal, Box, PlaySquare, AlertCircle } from 'lucide-react';
+import { X, Terminal, Box, PlaySquare, AlertCircle, ShieldCheck } from 'lucide-react';
 
 export function JobDetailPanel({ job, onClose }: { job: Job | null; onClose: () => void }) {
   const [activeTab, setActiveTab] = useState('Overview');
@@ -128,17 +128,59 @@ export function JobDetailPanel({ job, onClose }: { job: Job | null; onClose: () 
               </div>
             )}
 
-            {activeTab === 'Compliance' && (
-              <div className="space-y-4">
-                <div className="bg-rose-50 dark:bg-rose-500/5 border border-rose-200 dark:border-rose-500/20 text-rose-800 dark:text-rose-300 p-5 rounded-2xl text-[12px] font-mono leading-relaxed ring-1 ring-inset ring-transparent dark:ring-rose-500/10 shadow-sm">
-                  <span className="text-rose-600 dark:text-rose-400 block mb-2 font-bold">- 15% margin improvement</span>
-                  <span className="text-emerald-700 dark:text-emerald-400 block mb-3 font-bold">+ 15% estimated margin improvement</span>
-                  <span className="text-[10px] text-rose-500/80 dark:text-rose-400/80 block mt-2 border-t border-rose-200 dark:border-rose-500/20 pt-3">
-                    // Policy violation: Forward-looking statements must contain the word "estimated"
-                  </span>
+            {activeTab === 'Compliance' && (() => {
+              const complianceLog = (job.agentLogs || [])
+                .filter(l => l.agent === 'Compliance Engine' && l.metadata?.compliance_details)
+                .slice().reverse()[0];
+              
+              const issues = complianceLog?.metadata?.compliance_details || job.metadata?.compliance_details || [];
+              const retries = complianceLog?.metadata?.compliance_retries || job.metadata?.compliance_retries || 1;
+
+              return (
+                <div className="space-y-4">
+                  {(!issues || issues.length === 0) ? (
+                    <div className="flex flex-col items-center justify-center py-12 bg-emerald-50/20 dark:bg-emerald-500/5 border border-emerald-100 dark:border-emerald-500/20 rounded-2xl">
+                      <ShieldCheck className="w-8 h-8 text-emerald-500 mb-3 opacity-60" />
+                      <p className="text-[11px] font-mono uppercase tracking-widest text-emerald-600 dark:text-emerald-400">Zero Violations Detected</p>
+                    </div>
+                  ) : (
+                    <>
+                      {issues.map((issue: any, i: number) => (
+                        <div key={i} className="bg-rose-50 dark:bg-rose-500/5 border border-rose-200 dark:border-rose-500/20 p-5 rounded-2xl flex flex-col gap-3 ring-1 ring-inset ring-transparent dark:ring-rose-500/10 shadow-sm relative overflow-hidden group">
+                          <div className="absolute top-0 right-0 px-3 py-1 bg-white/40 dark:bg-white/5 border-b border-l border-rose-200 dark:border-rose-500/20 rounded-bl-xl text-[9px] font-mono tracking-widest uppercase font-bold text-rose-500">
+                             {issue.severity || 'high'}
+                          </div>
+                          
+                          <div className="space-y-2">
+                            <span className="text-rose-600 dark:text-rose-400 block text-[12px] font-mono font-bold leading-relaxed line-through decoration-rose-500/40">
+                              - {issue.sentence}
+                            </span>
+                            <span className="text-emerald-700 dark:text-emerald-400 block text-[12px] font-mono font-bold leading-relaxed">
+                              + {issue.suggestion || 'Suggesting compliant variant...'}
+                            </span>
+                          </div>
+
+                          <div className="pt-3 border-t border-rose-200 dark:border-rose-500/10 flex items-center justify-between">
+                            <span className="text-[10px] text-rose-500/80 dark:text-rose-400/80 font-mono italic">
+                              // Policy: {issue.violation}
+                            </span>
+                          </div>
+                        </div>
+                      ))}
+                      
+                      {job.status === 'Compliance' && (
+                         <div className="flex items-center justify-center gap-2 pt-2">
+                            <span className="w-1.5 h-1.5 rounded-full bg-rose-500 animate-pulse" />
+                            <span className="text-[10px] font-mono text-rose-500 uppercase tracking-widest">
+                              Issue Remediation in progress — Attempt {retries} of 3
+                            </span>
+                         </div>
+                      )}
+                    </>
+                  )}
                 </div>
-              </div>
-            )}
+              );
+            })()}
 
             {activeTab === 'Channels' && (
               <div className="space-y-4">
