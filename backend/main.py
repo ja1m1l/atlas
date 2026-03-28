@@ -294,7 +294,7 @@ async def start_pipeline(req: PipelineStartRequest, background_tasks: Background
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/api/pipeline/resume/{job_id}")
-async def resume_pipeline(job_id: str, background_tasks: BackgroundTasks):
+async def resume_pipeline(job_id: str, background_tasks: BackgroundTasks, req: Optional[ApproveRequest] = None):
     """Resume the pipeline from localization review to approval."""
     try:
         supabase = get_supabase_client()
@@ -308,13 +308,17 @@ async def resume_pipeline(job_id: str, background_tasks: BackgroundTasks):
         if not is_reviewable or job_data.get('progress') != 80:
             return {'success': False, 'error': f'Job is not in review state. Current: {job_data["status"]} @ {job_data.get("progress")}%'}
         
+        # If variants provided, update the job content immediately
+        if req and req.channel_variants:
+            supabase.table("jobs").update({
+                "output_content": req.channel_variants
+            }).eq("id", job_id).execute()
+            job_data["output_content"] = req.channel_variants
+
         # Move to Pending (capitalized as per JobContext type)
         supabase.table('jobs').update({'status': 'Pending'}).eq('id', job_id).execute()
         
         # Prepare state for approval_node
-        # We need to fetch related data to recreate the state
-        logs = supabase.table("agent_logs").select("*").eq("job_id", job_id).execute()
-        
         state = {
             "job_id": job_id,
             "org_id": job_data["organization_id"],
@@ -324,19 +328,16 @@ async def resume_pipeline(job_id: str, background_tasks: BackgroundTasks):
             "target_languages": job_data.get("target_languages", ["en"]),
             "channels": job_data.get("channels", []),
             "spec_text": "",
-            "draft_text": job_data.get("draft_text", ""), # Assuming this was updated in previous steps
+            "draft_text": job_data.get("draft_text", ""),
             "image_url": job_data.get("image_url", ""),
             "channel_variants": job_data.get("output_content") or {},
-            "compliance_result": {}, # Can be more detailed if needed
+            "compliance_result": {},
             "compliance_retries": 0,
             "localized_variants": job_data.get("localized_variants") or {},
             "approval_status": "pending",
             "audit_log": [],
         }
         
-        # If draft_text is not in job, try to get from job_content if needed. 
-        # But for now, assume it's available or we fetch the latest variant.
-
         background_tasks.add_task(approval_node, state)
         
         return {'success': True, 'data': {'message': 'Pipeline resumed, approval triggered'}}

@@ -12,15 +12,27 @@ export function JobDetailPanel({ job, onClose }: { job: Job | null; onClose: () 
 
   // Editable content state — initialized from job.outputContent
   const [editedContent, setEditedContent] = useState<Record<string, string>>({});
+  const [currentJobId, setCurrentJobId] = useState<string | null>(null);
   const [selectedL10nLang, setSelectedL10nLang] = useState('en');
   const [localVariants, setLocalVariants] = useState<Record<string, any>>({});
 
   // Synchronize editedContent when job or its outputContent changes
   useEffect(() => {
-    if (job?.outputContent) {
+    if (!job) return;
+
+    if (job.id !== currentJobId) {
+      // New job selected - reset state
+      setCurrentJobId(job.id);
+      if (job.outputContent) {
+        setEditedContent({ ...job.outputContent });
+      } else {
+        setEditedContent({});
+      }
+    } else if (job.outputContent && Object.keys(editedContent).length === 0) {
+      // Initial content load for same job
       setEditedContent({ ...job.outputContent });
     }
-    
+
     if (job) {
       const variants: Record<string, any> = {
         en: { 
@@ -43,6 +55,8 @@ export function JobDetailPanel({ job, onClose }: { job: Job | null; onClose: () 
     try {
       const resp = await fetch(`http://localhost:8000/api/pipeline/resume/${job.id}`, {
         method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ channel_variants: editedContent })
       });
       const data = await resp.json();
       if (!data.success) throw new Error(data.error);
