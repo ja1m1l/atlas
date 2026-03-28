@@ -10,3 +10,5 @@ apscheduler
 resend
 requests
 python-multipart
+pdfplumber
+Pillow

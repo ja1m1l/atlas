@@ -307,21 +307,48 @@ async def publer_webhook(payload: PublerWebhookPayload):
 
 @app.post("/api/extract-pdf")
 async def extract_pdf_text(file: UploadFile = File(...)):
+    """Extract text from an uploaded PDF file using pdfplumber."""
     try:
         import pdfplumber
+        logger.info(f"[ExtractPDF] Processing file: {file.filename}")
         file_bytes = await file.read()
+        
+        if not file_bytes:
+            return {"text": "", "warning": "The uploaded file is empty."}
+            
         text = ""
-        with pdfplumber.open(io.BytesIO(file_bytes)) as pdf:
-            for page in pdf.pages:
-                page_text = page.extract_text()
-                if page_text:
-                    text += page_text + "\n"
+        try:
+            with pdfplumber.open(io.BytesIO(file_bytes)) as pdf:
+                for page in pdf.pages:
+                    try:
+                        page_text = page.extract_text()
+                        if page_text:
+                            text += page_text + "\n"
+                    except Exception as page_err:
+                        logger.warning(f"[ExtractPDF] Could not extract text from a page in {file.filename}: {page_err}")
+                        continue
+        except Exception as open_err:
+             logger.error(f"[ExtractPDF] pdfplumber could not open {file.filename}: {open_err}")
+             raise Exception(f"pdfplumber could not open PDF (might be encrypted or corrupted): {str(open_err)}")
+
         extracted = text.strip()
         if not extracted:
-            return {"text": "", "warning": "No text could be extracted from this PDF."}
+            logger.warning(f"[ExtractPDF] No text extracted from {file.filename}")
+            return {"text": "", "warning": "No text could be extracted from this PDF. It might be scanned or image-based."}
+        
+        logger.info(f"[ExtractPDF] Successfully extracted {len(extracted)} characters from {file.filename}")
         return {"text": extracted}
     except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Failed to extract PDF text: {str(e)}")
+        logger.error(f"[ExtractPDF] Critical failure: {e}")
+        logger.error(traceback.format_exc())
+        raise HTTPException(
+            status_code=400, 
+            detail={
+                "error": "Failed to extract PDF text",
+                "message": str(e),
+                "traceback": traceback.format_exc() if os.getenv("DEBUG") else None
+            }
+        )
 
 @app.post("/api/jobs/{job_id}/approve")
 async def approve_job(job_id: str, background_tasks: BackgroundTasks, req: Optional[ApproveRequest] = None):

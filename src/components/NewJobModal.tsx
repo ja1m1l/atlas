@@ -42,15 +42,23 @@ export function NewJobModal({ onClose }: { onClose: () => void }) {
         method: 'POST',
         body: formData
       });
-      if (!resp.ok) throw new Error('PDF extraction failed');
+      
+      if (!resp.ok) {
+        const errData = await resp.json().catch(() => ({ detail: 'Unknown error' }));
+        const errorMessage = typeof errData.detail === 'object' 
+          ? errData.detail.message || errData.detail.error 
+          : errData.detail;
+        throw new Error(errorMessage || 'PDF extraction failed');
+      }
+
       const data = await resp.json();
       setObjectivePdfText(data.text || '');
       if (data.warning) {
         alert(data.warning);
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error('PDF extraction error:', err);
-      alert('Failed to extract text from PDF. Please try again or use text input.');
+      alert(`Failed to extract text from PDF: ${err.message || 'Please try again or use text input.'}`);
       setObjectivePdf(null);
     } finally {
       setIsExtractingPdf(false);
