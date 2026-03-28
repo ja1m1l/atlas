@@ -53,7 +53,7 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
       {/* Background Layers */}
       <div className={`fixed inset-0 transition-colors duration-300 ${isDarkMode ? 'bg-[#050505]' : 'bg-slate-100'}`} />
       
-      <div className="fixed inset-0 z-0 pointer-events-none opacity-40 dark:opacity-60 select-none overflow-hidden">
+      <div className="fixed inset-0 z-0 pointer-events-none opacity-20 dark:opacity-60 select-none overflow-hidden">
         <Aurora
           colorStops={["#00a3d7","#b51a00","#b92d5d"]}
           blend={0.5}
@@ -66,10 +66,10 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
         <div className="flex items-center gap-1.5">
           <GlobeLogo />
           <div className="flex flex-col justify-center relative">
-            <span className="font-black leading-none tracking-wider text-[16px] italic pr-2 flex items-center gap-2 bg-gradient-to-r from-cyan-300 via-teal-400 to-cyan-500 bg-clip-text text-transparent">
+            <span className="font-black leading-none tracking-wider text-[16px] italic pr-2 flex items-center gap-2 bg-gradient-to-r from-indigo-600 via-cyan-600 to-indigo-600 dark:from-cyan-300 dark:via-teal-400 dark:to-cyan-500 bg-clip-text text-transparent">
               ATLASOPS
             </span>
-            <span className="text-cyan-600 dark:text-cyan-400/70 font-mono text-[8px] tracking-[0.25em] uppercase font-bold mt-0.5">
+            <span className="text-cyan-700 dark:text-cyan-400/70 font-mono text-[8px] tracking-[0.25em] uppercase font-bold mt-0.5">
               Intelligent Systems
             </span>
             {/* Rocket trail underline */}

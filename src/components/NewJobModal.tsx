@@ -366,10 +366,10 @@ export function NewJobModal({ onClose }: { onClose: () => void }) {
             </p>
           </div>
 
-          {/* Post Image (Optional) */}
+          {/* Post Image (Compulsary) */}
           <div className="flex flex-col gap-2 mt-4">
             <label className="text-[11px] font-mono text-slate-500 dark:text-zinc-500 uppercase tracking-widest font-semibold flex items-center gap-2">
-              <ImageIcon className="w-3.5 h-3.5" /> Post Image (Optional)
+              <ImageIcon className="w-3.5 h-3.5" /> Post Image (Compulsary)
             </label>
             <div
               onClick={() => imageInputRef.current?.click()}
