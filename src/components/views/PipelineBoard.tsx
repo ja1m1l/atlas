@@ -73,7 +73,7 @@ export function PipelineBoard() {
                   <div 
                     key={job.id}
                     onClick={() => setSelectedJob(job)}
-                    className="bg-white dark:bg-[#141417] p-4 rounded-2xl cursor-pointer group hover:bg-slate-50 dark:hover:bg-[#18181b] transition-all border border-slate-200 dark:border-[#27272a]/60 shadow-sm dark:shadow-none ring-1 ring-inset ring-transparent dark:ring-white/5 hover:border-indigo-200 dark:hover:border-zinc-600/50"
+                    className="bg-[#f8fafc] dark:bg-[#141417] p-4 rounded-2xl cursor-pointer group hover:bg-[#f1f5f9] dark:hover:bg-[#18181b] transition-all border border-slate-200 dark:border-[#27272a]/60 shadow-sm dark:shadow-none ring-1 ring-inset ring-transparent dark:ring-white/5 hover:border-indigo-200 dark:hover:border-zinc-600/50"
                   >
                     <div className="flex justify-between items-start mb-3">
                       <span className="text-[10px] font-mono text-indigo-600 dark:text-zinc-400 bg-indigo-50 dark:bg-white/5 px-2 py-0.5 rounded-full border border-indigo-100 dark:border-white/10 uppercase tracking-wider">

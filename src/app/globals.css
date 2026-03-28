@@ -4,6 +4,8 @@
 @theme {
   --color-atlas-bg: #050505;
   --color-atlas-panel: #141417;
+  --color-atlas-bg-light: #f0f2f5;
+  --color-atlas-panel-light: #fdfdfd;
   --color-atlas-amber: #f59e0b;
   --color-atlas-green: #10b981;
   --color-atlas-blue: #3b82f6;

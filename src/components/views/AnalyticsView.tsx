@@ -87,7 +87,7 @@ export function AnalyticsView() {
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 flex-1 min-h-[400px]">
         {/* Charts */}
-        <div className="lg:col-span-2 bg-white dark:bg-[#141417] border border-slate-200 dark:border-[#27272a]/60 rounded-2xl p-6 shadow-sm dark:shadow-none ring-1 ring-inset ring-transparent dark:ring-white/5 flex flex-col">
+        <div className="lg:col-span-2 bg-[#f8fafc] dark:bg-[#141417] border border-slate-200 dark:border-[#27272a]/60 rounded-2xl p-6 shadow-sm dark:shadow-none ring-1 ring-inset ring-transparent dark:ring-white/5 flex flex-col">
           <div className="flex items-center justify-between border-b border-slate-200 dark:border-[#27272a]/50 pb-4 mb-6">
             <h2 className="text-[13px] font-medium text-slate-700 dark:text-zinc-300">Active Pipeline Load</h2>
             <div className="flex bg-slate-50 dark:bg-[#0f0f12] rounded-lg p-1 border border-slate-200 dark:border-[#27272a]/40">
@@ -180,7 +180,7 @@ export function AnalyticsView() {
 
 function KPICard({ title, value, trend, positive, icon }: any) {
   return (
-    <div className="bg-white dark:bg-[#141417] border border-slate-200 dark:border-[#27272a]/60 rounded-2xl p-5 flex flex-col justify-between h-[120px] shadow-sm dark:shadow-none ring-1 ring-inset ring-transparent dark:ring-white/5 overflow-hidden relative group hover:border-indigo-200 dark:hover:border-zinc-700/60 transition-colors">
+    <div className="bg-[#f8fafc] dark:bg-[#141417] border border-slate-200 dark:border-[#27272a]/60 rounded-2xl p-5 flex flex-col justify-between h-[120px] shadow-sm dark:shadow-none ring-1 ring-inset ring-transparent dark:ring-white/5 overflow-hidden relative group hover:border-indigo-200 dark:hover:border-zinc-700/60 transition-colors">
       <div className="absolute right-0 top-0 bottom-0 w-24 bg-gradient-to-l from-indigo-50/50 dark:from-white/5 to-transparent pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity" />
       <div className="flex justify-between items-center w-full">
         <span className="text-[13px] font-medium text-slate-500 dark:text-zinc-400">{title}</span>

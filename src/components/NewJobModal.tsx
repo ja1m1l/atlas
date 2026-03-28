@@ -168,7 +168,7 @@ export function NewJobModal({ onClose }: { onClose: () => void }) {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 dark:bg-black/80 backdrop-blur-sm p-4">
-      <div className="w-full max-w-[600px] bg-white dark:bg-[#0c0c0e] border border-slate-200 dark:border-[#27272a]/60 rounded-3xl shadow-2xl flex flex-col overflow-hidden ring-1 ring-inset ring-transparent dark:ring-white/5 max-h-[90vh]">
+      <div className="w-full max-w-[600px] bg-[#fdfdfd] dark:bg-[#0c0c0e] border border-slate-200 dark:border-[#27272a]/60 rounded-3xl shadow-2xl flex flex-col overflow-hidden ring-1 ring-inset ring-transparent dark:ring-white/5 max-h-[90vh]">
 
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-5 border-b border-slate-200 dark:border-[#27272a]/40 bg-slate-50 dark:bg-[#0f0f12] shrink-0">
