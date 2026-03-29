@@ -114,6 +114,7 @@ source .venv/Scripts/activate
 pip install -r backend/requirements.txt
 # 4. Run the FastAPI server
 uvicorn backend.main:app --reload --host 0.0.0.0 --port 8000
+
 For macOS (using Terminal / Bash / Zsh):
 
 bash
