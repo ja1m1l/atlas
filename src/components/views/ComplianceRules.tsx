@@ -34,8 +34,9 @@ export function ComplianceRules() {
 
   const fetchRules = async () => {
     setIsLoading(true);
+    const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000';
     try {
-      const resp = await fetch('http://127.0.0.1:8000/api/rules');
+      const resp = await fetch(`${backendUrl}/api/rules`);
       const data = await resp.json();
       if (data && data.forbidden_words) {
          setRules(data);
@@ -49,8 +50,9 @@ export function ComplianceRules() {
 
   const handleSave = async () => {
     setIsSaving(true);
+    const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000';
     try {
-      const resp = await fetch('http://127.0.0.1:8000/api/rules', {
+      const resp = await fetch(`${backendUrl}/api/rules`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ rules })

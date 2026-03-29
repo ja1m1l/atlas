@@ -25,7 +25,8 @@ export function NewJobModal({ onClose }: { onClose: () => void }) {
     console.log('[AtlasOps] Uploading:', file.name);
     const formData = new FormData();
     formData.append('file', file);
-    const resp = await fetch('http://localhost:8000/api/upload', {
+    const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000';
+    const resp = await fetch(`${backendUrl}/api/upload`, {
       method: 'POST',
       body: formData
     });
@@ -38,7 +39,8 @@ export function NewJobModal({ onClose }: { onClose: () => void }) {
     try {
       const formData = new FormData();
       formData.append('file', file);
-      const resp = await fetch('http://localhost:8000/api/extract-pdf', {
+      const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000';
+      const resp = await fetch(`${backendUrl}/api/extract-pdf`, {
         method: 'POST',
         body: formData
       });
@@ -90,7 +92,8 @@ export function NewJobModal({ onClose }: { onClose: () => void }) {
       // For this hackathon demo, we use the default organization ID
       const organization_id = "02c4a65c-bad2-41b4-8e69-9aed1b2cca4a";
 
-        const response = await fetch('http://localhost:8000/api/pipeline/start', {
+        const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000';
+        const response = await fetch(`${backendUrl}/api/pipeline/start`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({

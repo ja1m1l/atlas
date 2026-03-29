@@ -52,8 +52,9 @@ export function JobDetailPanel({ job, onClose }: { job: Job | null; onClose: () 
   const handleResume = async () => {
     if (!job || isResuming) return;
     setIsResuming(true);
+    const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000';
     try {
-      const resp = await fetch(`http://localhost:8000/api/pipeline/resume/${job.id}`, {
+      const resp = await fetch(`${backendUrl}/api/pipeline/resume/${job.id}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ channel_variants: editedContent })
@@ -77,8 +78,9 @@ export function JobDetailPanel({ job, onClose }: { job: Job | null; onClose: () 
     if (!job || isApproving) return;
 
     setIsApproving(true);
+    const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000';
     try {
-      const resp = await fetch(`http://localhost:8000/api/jobs/${job.id}/approve`, {
+      const resp = await fetch(`${backendUrl}/api/jobs/${job.id}/approve`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ channel_variants: editedContent })
