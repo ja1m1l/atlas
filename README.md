@@ -100,7 +100,7 @@ NEXT_PUBLIC_SUPABASE_ANON_KEY=your_anon_key_here
 ### 2. Clone & Install & Run Locally
 
 ```bash
-Terminal 1: Run the Backend (FastAPI)
+********** Terminal 1: Run the Backend (FastAPI) *********
 Make sure you are in the root atlas directory in your terminal before running these commands.
 
 For Windows (using Git Bash):
@@ -128,7 +128,7 @@ uvicorn backend.main:app --reload --host 0.0.0.0 --port 8000
 
 (You should see a message saying Application startup complete. The backend is now running at http://localhost:8000)
 
-Terminal 2: Run the Frontend (Next.js)
+********** Terminal 2: Run the Frontend (Next.js) *********
 Open a new Git Bash (Windows) or Terminal (macOS) window, navigate to the root atlas directory, and run:
 
 For BOTH Windows (Git Bash) and macOS:
