@@ -74,24 +74,7 @@ User submits topic → Drafting Agent → Compliance Agent (retry loop, max 3x)
 - Buffer developer account (free)
 - Resend account (free, 100 emails/day)
 
-### 1. Clone & Install
-
-```bash
-git clone https://github.com/ja1m1l/atlas.git
-cd atlas
-
-# Backend
-cd backend
-python -m venv .venv
-source .venv/bin/activate   # Windows: .venv\Scripts\activate
-pip install -r requirements.txt
-
-# Frontend (from project root)
-cd ..
-npm install
-```
-
-### 2. Environment Variables
+### 1. Environment Variables
 
 Create `backend/.env`:
 
@@ -113,6 +96,49 @@ BUFFER_ACCESS_TOKEN=your_buffer_access_token_here
 # App
 NEXT_PUBLIC_SUPABASE_URL=https://xxxxxxxxxxxx.supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY=your_anon_key_here
+```
+### 2. Clone & Install & Run Locally
+
+```bash
+Terminal 1: Run the Backend (FastAPI)
+Make sure you are in the root atlas directory in your terminal before running these commands.
+
+For Windows (using Git Bash):
+
+bash
+# 1. Create a virtual environment (if you haven't already)
+python -m venv .venv
+# 2. Activate the virtual environment
+source .venv/Scripts/activate
+# 3. Install the required Python packages
+pip install -r backend/requirements.txt
+# 4. Run the FastAPI server
+uvicorn backend.main:app --reload --host 0.0.0.0 --port 8000
+For macOS (using Terminal / Bash / Zsh):
+
+bash
+# 1. Create a virtual environment (if you haven't already)
+python3 -m venv .venv
+# 2. Activate the virtual environment
+source .venv/bin/activate
+# 3. Install the required Python packages
+pip install -r backend/requirements.txt
+# 4. Run the FastAPI server
+uvicorn backend.main:app --reload --host 0.0.0.0 --port 8000
+
+(You should see a message saying Application startup complete. The backend is now running at http://localhost:8000)
+
+Terminal 2: Run the Frontend (Next.js)
+Open a new Git Bash (Windows) or Terminal (macOS) window, navigate to the root atlas directory, and run:
+
+For BOTH Windows (Git Bash) and macOS:
+
+bash
+# 1. Install Node.js dependencies (only needed the first time or if package.json changes)
+npm install
+# 2. Start the Next.js development server
+npm run dev
+(You should see a message saying the server is ready. The frontend is now running at http://localhost:3000)
 ```
 
 ### 3. Database Setup
@@ -136,20 +162,6 @@ INSERT INTO compliance_rules (id, rules) VALUES (1, '{
   "max_exclamation_marks": 1
 }'::jsonb) ON CONFLICT (id) DO NOTHING;
 ```
-
-### 4. Run Locally
-
-```bash
-# Terminal 1 — Backend (from project root)
-uvicorn backend.main:app --reload --port 8000
-
-# Terminal 2 — Frontend (from project root)
-npm run dev
-```
-
-Open [http://localhost:3000](http://localhost:3000)
-
----
 
 ## Running the 3 Hackathon Scenarios
 
